@@ -31,6 +31,7 @@ func routes() *echo.Echo {
 	e.POST("/decks", createDeckHandler)
 	e.DELETE("/decks/:id", deleteDeckHandler)
 	e.POST("/import", importHandler)
+	e.POST("/quit", quitHandler)
 
 	e.GET("/deck/:id", deckPageHandler)
 	e.GET("/deck/:id/search", searchHandler)

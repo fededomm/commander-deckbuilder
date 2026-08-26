@@ -30,9 +30,11 @@ func main() {
 	port := flag.Int("port", 8090, "porta HTTP (0 = una libera qualsiasi)")
 	flag.Parse()
 
-	if err := os.MkdirAll(filepath.Dir(*dbPath), 0o755); err != nil {
+	dataDir := filepath.Dir(*dbPath)
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		log.Fatalf("cartella dati: %v", err)
 	}
+	logToFile(dataDir)
 	var err error
 	if db, err = openDB(*dbPath); err != nil {
 		log.Fatalf("database %s: %v", *dbPath, err)
@@ -49,6 +51,20 @@ func main() {
 		openBrowser(url)
 	}
 	log.Fatal(http.Serve(ln, routes()))
+}
+
+// logToFile: l'installer Windows avvia il binario senza console (-H windowsgui)
+// e il .app macOS senza terminale. Senza questo, un errore all'avvio — porta
+// occupata, DB illeggibile — sparirebbe nel nulla.
+func logToFile(dir string) {
+	if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "deckbuilder.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err == nil {
+		log.SetOutput(f)
+	}
 }
 
 // listen prova la porta chiesta; se è occupata ne prende una libera invece di

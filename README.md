@@ -24,6 +24,7 @@ Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no
 - `view.go` — categorie, totali, formato euro, simboli di mana
 - `*.templ` — le pagine; i `*_templ.go` accanto sono generati, non si modificano
 - `static/` — CSS, htmx, SVG dei simboli: finiscono **dentro** il binario con `go:embed`
+- `packaging/` — icone, script NSIS e `build.sh` che produce i pacchetti
 
 ## Dove sta il database
 
@@ -45,22 +46,54 @@ unique su `(deck_id, scryfall_id)`, più `qty`, `set_code`, `collector_number`, 
 
 ## Distribuzione
 
-Niente installer e niente firma: un file eseguibile per piattaforma, `CGO_ENABLED=0`
-grazie a `modernc.org/sqlite` (SQLite tradotto in Go, non un binding C).
+`CGO_ENABLED=0` grazie a `modernc.org/sqlite` (SQLite tradotto in Go, non un
+binding C): tutti i target si compilano da Linux/WSL, ~12 MB l'uno.
 
 ```sh
-CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/deckbuilder
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/deckbuilder.exe
-CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/deckbuilder-mac
+sudo apt install nsis       # una volta sola, serve per l'installer Windows
+./packaging/build.sh        # VERSION=0.3.0 ./packaging/build.sh per cambiare versione
 ```
 
-Tutte e tre si compilano da Linux/WSL, ~12 MB l'una. L'utente fa doppio clic e
-il browser si apre da solo; se la 8090 è occupata ne prende un'altra.
+Escono in `dist/`:
 
-Su macOS Gatekeeper blocca un binario non firmato scaricato dal web: l'utente fa
-clic destro → Apri una volta sola, oppure `xattr -dr com.apple.quarantine ./deckbuilder-mac`.
-Per evitarglielo servono un Apple Developer ID e la notarizzazione — e per quella
-serve un Mac, `codesign` e `notarytool` non esistono altrove.
+| | |
+|---|---|
+| `…-windows-setup.exe` | installer NSIS, ~4 MB |
+| `…-macos-arm64.zip` / `-amd64.zip` | bundle `.app` pronto da trascinare in Applicazioni |
+| `…-macos-*.dmg` | **solo se lanci lo script su un Mac** |
+
+Il binario semplice resta un `go build` normale, se ti basta quello.
+
+### Windows
+
+Installer **per utente singolo**: va in `%LOCALAPPDATA%\Programs`, non chiede
+l'amministratore, mette la voce nel menu Start e in "App installate" con il suo
+disinstallatore. L'eseguibile è compilato `-H windowsgui`, quindi niente finestra
+nera del prompt; in cambio non ha stderr, e scrive `deckbuilder.log` accanto al
+database. Disinstallando, i mazzi restano: li cancella solo se rispondi di sì
+alla domanda esplicita.
+
+### macOS
+
+Il `.app` si costruisce da Linux (è solo una cartella con `Info.plist`, il
+binario e l'icona), il **`.dmg` no**: vuole `hdiutil`, che esiste solo su macOS.
+Lo script se ne accorge da solo e lo produce se lo lanci lì.
+
+Senza un Apple Developer ID Gatekeeper blocca un `.app` non firmato scaricato dal
+web: clic destro → Apri, una volta sola, oppure
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Commander Deckbuilder.app"
+```
+
+Per evitarlo servono firma e notarizzazione (`codesign`, `notarytool`) — e per
+quelle serve un Mac.
+
+### Fermare l'app
+
+Installata non ha una console da chiudere: il server continua a girare anche
+dopo aver chiuso la scheda del browser. In fondo alla home c'è
+"⏻ chiudi l'applicazione", che è l'unico modo pulito di fermarlo.
 
 ## Import/export Moxfield
 

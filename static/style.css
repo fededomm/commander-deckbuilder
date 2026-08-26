@@ -81,3 +81,7 @@ input[type=text], input:not([type]) { padding:.6rem .8rem; border:1px solid var(
 
 /* riga mazzo: link e cestino separati (prima era tutto dentro un <a>) */
 .deck-item > a { flex:1; text-decoration:none; }
+
+/* fermare il server: installato non c'è una console da chiudere */
+#quit { margin-top:2.5rem; text-align:center; }
+#quit button { font-size:.8rem; }
