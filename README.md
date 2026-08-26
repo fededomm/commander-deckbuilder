@@ -1,66 +1,82 @@
 # Commander Deckbuilder
 
 Ricerca carte via [Scryfall](https://scryfall.com/docs/api), checklist acquisti e prezzi Cardmarket (EUR).
-Zero dipendenze: `node:sqlite` + `node:http` della stdlib, richiede Node ≥ 22.5.
+Un binario solo: Go + [templ](https://templ.guide) + htmx, SQLite in Go puro. Niente Node, niente Electron.
 
 ```sh
-npm start              # app Electron (finestra desktop)
-npm run dist:linux     # dist/*.AppImage
-npm run dist:win       # dist/*.exe portable  (funziona anche da Linux/WSL)
-npm run dist:mac       # dist/*.dmg + *.zip   -- SOLO da macOS, vedi sotto
-
-node server.mjs        # solo browser: http://localhost:8090, crea data.db al primo avvio
-node test.mjs          # check su categorie, prezzi, totali, Moxfield e API
-node symbols.mjs       # riscarica gli SVG dei simboli di mana (solo se Scryfall ne aggiunge)
+go run .               # avvia e apre il browser su http://localhost:8090
+go test ./...          # categorie, prezzi, totali, Moxfield, DB e rotte
+go generate ./...      # rigenera i *_templ.go dopo aver toccato un .templ
+go run ./tools/symbols # riscarica gli SVG dei simboli (solo se Scryfall ne aggiunge)
 ```
 
-- `server.mjs` — schema SQLite + API REST + serve i file statici
-- `public/index.html` — home: lista mazzi, creazione, totale per mazzo
-- `public/deck.html?id=N` — builder: ricerca Scryfall + checklist acquisti
-- `public/symbols/` + `symbols.js` — SVG dei simboli di mana, generati da `symbols.mjs`
-- `main.js` — avvio Electron: fa partire `server.mjs` su porta libera e apre la finestra
-- `data.db` — tutto qui dentro; per ripartire da zero basta cancellarlo
+Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no-browser`.
 
-**Attenzione ai due database.** `node server.mjs` usa `./data.db`; l'app Electron usa
-la cartella dati dell'utente (`~/.config/commander-deckbuilder/` su Linux,
-`%APPDATA%\commander-deckbuilder\` su Windows), perché la directory di
-installazione è di sola lettura. Sono separati: per travasare, copia il file.
+- `main.go` — server HTTP, rotte, apertura del browser
+- `db.go` — schema SQLite e query
+- `scryfall.go` — ricerca, batch `/cards/collection`, prezzi e immagini
+- `moxfield.go` — parser ed export del formato Moxfield
+- `view.go` — categorie, totali, formato euro, simboli di mana
+- `*.templ` — le pagine; i `*_templ.go` accanto sono generati, non si modificano
+- `static/` — CSS, htmx, SVG dei simboli: finiscono **dentro** il binario con `go:embed`
 
-Import/export in formato Moxfield (`1 Sol Ring (EOC) 57 *F*`): "Importa da Moxfield"
-in home, "↓ esporta" nella pagina mazzo. Il round-trip conserva quantità, stampa e foil.
+## Dove sta il database
 
-Tabelle: `decks` (nome) e `cards` (`deck_id` con `ON DELETE CASCADE`,
-unique su `(deck_id, scryfall_id)`, più `qty`, `set_code`, `collector_number`, `foil`).
-Le colonne mancanti vengono aggiunte all'avvio, i DB esistenti non vanno ricreati.
+`-db` se lo passi; altrimenti `./data.db` se esiste nella cartella corrente
+(sviluppo, o il DB copiato accanto al binario); altrimenti la cartella dati
+dell'utente:
 
 | | |
 |---|---|
-| `GET /api/decks` | mazzi con conteggi e totali (calcolati in SQL) |
-| `POST /api/decks` | `{name}` |
-| `GET /api/decks/:id` | mazzo + carte |
-| `DELETE /api/decks/:id` | elimina mazzo e carte |
-| `POST /api/decks/:id/cards` | aggiunge una carta o un array (import, in transazione); doppione ignorato |
-| `PATCH /api/cards/:id` | `{purchased}` / `{price_eur}` |
-| `DELETE /api/cards/:id` | |
+| Linux | `~/.config/commander-deckbuilder/data.db` |
+| Windows | `%APPDATA%\commander-deckbuilder\data.db` |
+| macOS | `~/Library/Application Support/commander-deckbuilder/data.db` |
 
+Le colonne mancanti vengono aggiunte all'avvio: i DB creati dalla vecchia
+versione Node si aprono così come sono. Per ripartire da zero, cancella il file.
 
-## macOS
+Tabelle: `decks` (nome) e `cards` (`deck_id` con `ON DELETE CASCADE`,
+unique su `(deck_id, scryfall_id)`, più `qty`, `set_code`, `collector_number`, `foil`).
 
-Il `.dmg` va costruito **su un Mac**: electron-builder usa `hdiutil` e `sips`, che
-esistono solo lì. Da Linux esce il `.app` (target `zip`) ma non l'installer.
+## Distribuzione
 
-```sh
-# su un Mac, nella cartella del progetto
-npm ci && npm run dist:mac      # dist/*.dmg per arm64 e x64
-```
-
-Senza un certificato Apple Developer, electron-builder firma ad-hoc: l'app parte,
-ma al primo avvio Gatekeeper la blocca. L'utente deve fare clic destro → Apri
-(una volta sola), oppure:
+Niente installer e niente firma: un file eseguibile per piattaforma, `CGO_ENABLED=0`
+grazie a `modernc.org/sqlite` (SQLite tradotto in Go, non un binding C).
 
 ```sh
-xattr -dr com.apple.quarantine "/Applications/Commander Deckbuilder.app"
+CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/deckbuilder
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/deckbuilder.exe
+CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/deckbuilder-mac
 ```
 
-Per distribuirla senza questo passaggio servono un Apple Developer ID e la
-notarizzazione (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`).
+Tutte e tre si compilano da Linux/WSL, ~12 MB l'una. L'utente fa doppio clic e
+il browser si apre da solo; se la 8090 è occupata ne prende un'altra.
+
+Su macOS Gatekeeper blocca un binario non firmato scaricato dal web: l'utente fa
+clic destro → Apri una volta sola, oppure `xattr -dr com.apple.quarantine ./deckbuilder-mac`.
+Per evitarglielo servono un Apple Developer ID e la notarizzazione — e per quella
+serve un Mac, `codesign` e `notarytool` non esistono altrove.
+
+## Import/export Moxfield
+
+Formato `1 Sol Ring (EOC) 57 *F*`: "Importa da Moxfield" in home, "↓ esporta" nella
+pagina mazzo. Il round-trip conserva quantità, stampa e foil. Le righe che Scryfall
+non riconosce vengono elencate invece di sparire.
+
+## Rotte
+
+Restituiscono frammenti HTML per htmx, non JSON.
+
+| | |
+|---|---|
+| `GET /` | home: mazzi, conteggi e totali (calcolati in SQL) |
+| `POST /decks` | crea (`name`), risponde con `HX-Redirect` |
+| `DELETE /decks/:id` | elimina mazzo e carte, rirenderizza la lista |
+| `POST /import` | lista Moxfield → nuovo mazzo |
+| `GET /deck/:id` | pagina builder |
+| `GET /deck/:id/search?q=` | risultati Scryfall |
+| `POST /deck/:id/cards` | aggiunge (`scryfall_id`); doppione ignorato |
+| `POST /deck/:id/prices` | riallinea i prezzi a Scryfall |
+| `GET /deck/:id/export` | scarica in formato Moxfield |
+| `POST /cards/:id/toggle` | inverte "acquistata" |
+| `DELETE /cards/:id` | rimuove la carta |
