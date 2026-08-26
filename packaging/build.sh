@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # Costruisce i pacchetti distribuibili in dist/.
-#   Windows: installer NSIS per utente singolo (serve makensis)
-#   macOS:   bundle .app zippato per arm64 e amd64; il .dmg solo se giri su un Mac
+#   windows  installer NSIS per utente singolo (serve makensis)
+#   macos    bundle .app zippato per arm64 e amd64; il .dmg solo se giri su un Mac
+#   linux    binario in un tar.gz
+# Senza argomenti li fa tutti:  ./packaging/build.sh [windows] [macos] [linux]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${VERSION:-0.2.0}"
 APPNAME="Commander Deckbuilder"
 OUT=dist
+TARGETS="${*:-windows macos linux}"
+want() { [[ " $TARGETS " == *" $1 "* ]]; }
 
 rm -rf "$OUT"
-mkdir -p "$OUT/windows"
+mkdir -p "$OUT"
 go generate ./...
 
 # --- Windows -----------------------------------------------------------------
+if want windows; then
+mkdir -p "$OUT/windows"
 # -H windowsgui: niente finestra nera del prompt all'avvio. In cambio non c'è
 # stderr, per questo il binario scrive deckbuilder.log accanto al database.
 go tool go-winres simply --arch amd64 --icon packaging/icon.png --manifest gui \
@@ -31,8 +37,10 @@ if command -v "$MAKENSIS" >/dev/null 2>&1; then
 else
   echo "!! makensis non trovato, salto l'installer Windows (sudo apt install nsis)" >&2
 fi
+fi
 
 # --- macOS -------------------------------------------------------------------
+if want macos; then
 for arch in arm64 amd64; do
   app="$OUT/macos/$arch/$APPNAME.app"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -82,7 +90,15 @@ if [ "$(uname)" = "Darwin" ]; then
       "$OUT/CommanderDeckbuilder-$VERSION-macos-$arch.dmg"
   done
 fi
+fi
+
+# --- Linux -------------------------------------------------------------------
+if want linux; then
+  mkdir -p "$OUT/linux"
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$OUT/linux/deckbuilder"
+  tar -czf "$OUT/CommanderDeckbuilder-$VERSION-linux-amd64.tar.gz" -C "$OUT/linux" deckbuilder
+fi
 
 echo
 echo "Pronto in $OUT/:"
-ls -1sh "$OUT" | grep -v '^total' | grep -vE 'windows|macos' || true
+find "$OUT" -maxdepth 1 -type f -exec ls -1sh {} +

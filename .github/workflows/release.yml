@@ -1,0 +1,84 @@
+# Su un tag v* costruisce i pacchetti e li appende a una release GitHub.
+# Il .dmg lo può fare solo un runner macOS: hdiutil non esiste altrove,
+# per questo il lavoro è spezzato su due sistemi operativi.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # per provare la build senza pubblicare niente
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: windows linux
+          - os: macos-latest
+            targets: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: NSIS
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+
+      - name: Pacchetti
+        # Sui tag la versione è il tag senza la "v"; a mano è una build di prova.
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="0.0.0-dev"
+          VERSION="$VERSION" ./packaging/build.sh ${{ matrix.targets }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacchetti-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.dmg
+            dist/*.tar.gz
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: pacchetti
+          merge-multiple: true
+      - name: Pubblica
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" pacchetti/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file - <<'NOTES'
+          Scarica il pacchetto per il tuo sistema:
+
+          | file | per |
+          |---|---|
+          | `…-windows-setup.exe` | Windows — installer per utente singolo, niente amministratore |
+          | `…-macos-arm64.dmg` | Mac con Apple Silicon (M1 e successivi) |
+          | `…-macos-amd64.dmg` | Mac con processore Intel |
+          | `…-linux-amd64.tar.gz` | Linux — un binario, `tar xzf` e via |
+
+          Nessuno dei pacchetti è firmato: al primo avvio macOS chiede clic destro → Apri,
+          Windows può mostrare l'avviso SmartScreen ("Ulteriori informazioni" → "Esegui comunque").
+          NOTES

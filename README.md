@@ -25,6 +25,7 @@ Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no
 - `*.templ` — le pagine; i `*_templ.go` accanto sono generati, non si modificano
 - `static/` — CSS, htmx, SVG dei simboli: finiscono **dentro** il binario con `go:embed`
 - `packaging/` — icone, script NSIS e `build.sh` che produce i pacchetti
+- `.github/workflows/release.yml` — build e release su tag
 
 ## Dove sta il database
 
@@ -49,9 +50,25 @@ unique su `(deck_id, scryfall_id)`, più `qty`, `set_code`, `collector_number`, 
 `CGO_ENABLED=0` grazie a `modernc.org/sqlite` (SQLite tradotto in Go, non un
 binding C): tutti i target si compilano da Linux/WSL, ~12 MB l'uno.
 
+### Release su GitHub
+
+Un tag fa tutto da solo:
+
 ```sh
-sudo apt install nsis       # una volta sola, serve per l'installer Windows
-./packaging/build.sh        # VERSION=0.3.0 ./packaging/build.sh per cambiare versione
+git tag v0.3.0 && git push origin v0.3.0
+```
+
+`.github/workflows/release.yml` gira i test, costruisce i pacchetti su due runner
+(Ubuntu per Windows e Linux, macOS per il `.dmg`) e apre la release con i file
+allegati. `workflow_dispatch` fa la stessa build senza pubblicare, per provare.
+
+### In locale
+
+```sh
+sudo apt install nsis                    # una volta sola, per l'installer Windows
+./packaging/build.sh                     # tutto
+./packaging/build.sh windows linux       # solo alcuni target
+VERSION=0.3.0 ./packaging/build.sh       # versione diversa da quella di default
 ```
 
 Escono in `dist/`:
@@ -60,7 +77,8 @@ Escono in `dist/`:
 |---|---|
 | `…-windows-setup.exe` | installer NSIS, ~4 MB |
 | `…-macos-arm64.zip` / `-amd64.zip` | bundle `.app` pronto da trascinare in Applicazioni |
-| `…-macos-*.dmg` | **solo se lanci lo script su un Mac** |
+| `…-macos-*.dmg` | **solo su un Mac** (in CI ci pensa il runner macOS) |
+| `…-linux-amd64.tar.gz` | il binario Linux |
 
 Il binario semplice resta un `go build` normale, se ti basta quello.
 
