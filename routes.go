@@ -7,64 +7,66 @@ import (
 	"strings"
 
 	"github.com/a-h/templ"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-func routes() http.Handler {
-	mux := http.NewServeMux()
-	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+func routes() *echo.Echo {
+	e := echo.New()
+	e.HideBanner, e.HidePort = true, true
+	e.Use(middleware.Recover()) // un panic in un handler non deve buttare giù l'app
 
-	mux.HandleFunc("GET /{$}", home)
-	mux.HandleFunc("POST /decks", createDeckHandler)
-	mux.HandleFunc("DELETE /decks/{id}", deleteDeckHandler)
-	mux.HandleFunc("POST /import", importHandler)
-
-	mux.HandleFunc("GET /deck/{id}", deckPageHandler)
-	mux.HandleFunc("GET /deck/{id}/search", searchHandler)
-	mux.HandleFunc("POST /deck/{id}/cards", addCardHandler)
-	mux.HandleFunc("POST /deck/{id}/prices", refreshPricesHandler)
-	mux.HandleFunc("GET /deck/{id}/export", exportHandler)
-
-	mux.HandleFunc("POST /cards/{id}/toggle", toggleHandler)
-	mux.HandleFunc("DELETE /cards/{id}", deleteCardHandler)
-	return mux
-}
-
-func render(w http.ResponseWriter, r *http.Request, c templ.Component) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := c.Render(r.Context(), w); err != nil {
-		log.Printf("render: %v", err)
+	// Un errore che esce da un handler diventa 500 e finisce nel log; per gli altri
+	// codici gli handler usano echo.ErrNotFound & co., che non vanno loggati.
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		if _, ok := err.(*echo.HTTPError); !ok {
+			log.Printf("errore: %v", err)
+		}
+		e.DefaultHTTPErrorHandler(err, c)
 	}
+
+	e.StaticFS("/static", echo.MustSubFS(staticFS, "static"))
+
+	e.GET("/", home)
+	e.POST("/decks", createDeckHandler)
+	e.DELETE("/decks/:id", deleteDeckHandler)
+	e.POST("/import", importHandler)
+
+	e.GET("/deck/:id", deckPageHandler)
+	e.GET("/deck/:id/search", searchHandler)
+	e.POST("/deck/:id/cards", addCardHandler)
+	e.POST("/deck/:id/prices", refreshPricesHandler)
+	e.GET("/deck/:id/export", exportHandler)
+
+	e.POST("/cards/:id/toggle", toggleHandler)
+	e.DELETE("/cards/:id", deleteCardHandler)
+	return e
 }
 
-func renderChecklist(w http.ResponseWriter, r *http.Request, deckID int64) {
+func render(c echo.Context, comp templ.Component) error {
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return comp.Render(c.Request().Context(), c.Response())
+}
+
+func renderChecklist(c echo.Context, deckID int64) error {
 	name, err := deckName(db, deckID)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
 	cards, err := deckCards(db, deckID)
-	if fail(w, err) {
-		return
-	}
-	render(w, r, checklist(Deck{ID: deckID, Name: name}, cards))
-}
-
-func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "id non valido", http.StatusBadRequest)
-		return 0, false
+		return err
 	}
-	return id, true
+	return render(c, checklist(Deck{ID: deckID, Name: name}, cards))
 }
 
-// fail logga e risponde 500. Torna true se c'era un errore, per uscire dall'handler.
-func fail(w http.ResponseWriter, err error) bool {
-	if err == nil {
-		return false
+func pathID(c echo.Context) (int64, error) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return 0, echo.NewHTTPError(http.StatusBadRequest, "id non valido")
 	}
-	log.Printf("errore: %v", err)
-	http.Error(w, err.Error(), http.StatusInternalServerError)
-	return true
+	return id, nil
 }
 
 // safeFilename: il nome del mazzo finisce in un header HTTP, niente virgolette o a capo.

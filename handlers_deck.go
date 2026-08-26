@@ -3,135 +3,134 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
-func deckPageHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func deckPageHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	name, err := deckName(db, id)
 	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
-		return
+		return echo.ErrNotFound
 	}
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
 	cards, err := deckCards(db, id)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	render(w, r, deckPage(Deck{ID: id, Name: name}, cards))
+	return render(c, deckPage(Deck{ID: id, Name: name}, cards))
 }
 
-func searchHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func searchHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	q := strings.TrimSpace(c.QueryParam("q"))
 	if q == "" {
-		return // campo svuotato: risultati vuoti, non un errore
+		return c.NoContent(http.StatusOK) // campo svuotato: risultati vuoti, non un errore
 	}
-	cards, err := scryfallSearch(r.Context(), q)
-	render(w, r, searchResults(id, cards, err))
+	cards, searchErr := scryfallSearch(c.Request().Context(), q)
+	return render(c, searchResults(id, cards, searchErr))
 }
 
-func addCardHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func addCardHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	// Il client manda solo l'id: la carta la rileggo da Scryfall, così non ho
 	// prezzi e immagini che rimbalzano avanti e indietro negli attributi HTML.
-	card, err := scryfallCard(r.Context(), r.FormValue("scryfall_id"))
-	if fail(w, err) {
-		return
+	card, err := scryfallCard(c.Request().Context(), c.FormValue("scryfall_id"))
+	if err != nil {
+		return err
 	}
-	if fail(w, insertCards(db, id, []Card{card.toCard(1, false)})) {
-		return
+	if err := insertCards(db, id, []Card{card.toCard(1, false)}); err != nil {
+		return err
 	}
-	renderChecklist(w, r, id)
+	return renderChecklist(c, id)
 }
 
-func toggleHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func toggleHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	deckID, err := togglePurchased(db, id)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	renderChecklist(w, r, deckID)
+	return renderChecklist(c, deckID)
 }
 
-func deleteCardHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func deleteCardHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	deckID, err := deleteCard(db, id)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	renderChecklist(w, r, deckID)
+	return renderChecklist(c, deckID)
 }
 
 // refreshPricesHandler riallinea i prezzi a Scryfall in un colpo solo.
-func refreshPricesHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func refreshPricesHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	cards, err := deckCards(db, id)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
 	ids := make([]identifier, len(cards))
-	for i, c := range cards {
-		ids[i] = identifier{ID: c.ScryfallID}
+	for i, card := range cards {
+		ids[i] = identifier{ID: card.ScryfallID}
 	}
-	fresh, err := scryfallCollection(r.Context(), ids)
-	if fail(w, err) {
-		return
+	fresh, err := scryfallCollection(c.Request().Context(), ids)
+	if err != nil {
+		return err
 	}
 	prices := make(map[string]float64, len(fresh))
-	for _, c := range fresh {
-		prices[c.ID] = c.price(false)
+	for _, card := range fresh {
+		prices[card.ID] = card.price(false)
 	}
-	for _, c := range cards {
-		if p, ok := prices[c.ScryfallID]; ok && p != c.PriceEUR {
-			if fail(w, setPrice(db, c.ID, p)) {
-				return
+	for _, card := range cards {
+		if p, ok := prices[card.ScryfallID]; ok && p != card.PriceEUR {
+			if err := setPrice(db, card.ID, p); err != nil {
+				return err
 			}
 		}
 	}
-	renderChecklist(w, r, id)
+	return renderChecklist(c, id)
 }
 
-func exportHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func exportHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
 	name, err := deckName(db, id)
 	if err == sql.ErrNoRows {
-		http.NotFound(w, r)
-		return
+		return echo.ErrNotFound
 	}
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
 	cards, err := deckCards(db, id)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+safeFilename(name)+`.txt"`)
-	fmt.Fprint(w, toMoxfield(cards))
+	c.Response().Header().Set(echo.HeaderContentDisposition,
+		`attachment; filename="`+safeFilename(name)+`.txt"`)
+	return c.String(http.StatusOK, toMoxfield(cards))
 }

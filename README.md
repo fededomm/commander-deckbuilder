@@ -2,7 +2,8 @@
 
 Ricerca carte via [Scryfall](https://scryfall.com/docs/api), checklist acquisti e prezzi Cardmarket (EUR).
 Un binario solo: Go + [templ](https://templ.guide) + htmx, SQLite in Go puro,
-[resty](https://github.com/go-resty/resty) per le chiamate a Scryfall. Niente Node, niente Electron.
+[echo](https://echo.labstack.com) per le rotte e [resty](https://github.com/go-resty/resty)
+per le chiamate a Scryfall. Niente Node, niente Electron.
 
 ```sh
 go run .               # avvia e apre il browser su http://localhost:8090
@@ -14,7 +15,7 @@ go run ./tools/symbols # riscarica gli SVG dei simboli (solo se Scryfall ne aggi
 Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no-browser`.
 
 - `main.go` — avvio: flag, scelta del DB, porta, apertura del browser
-- `routes.go` — il mux e gli helper condivisi degli handler
+- `routes.go` — le rotte echo, l'error handler e gli helper condivisi
 - `handlers_home.go` — elenco mazzi, creazione, cancellazione, import Moxfield
 - `handlers_deck.go` — pagina mazzo: ricerca, checklist, prezzi, export
 - `db.go` — schema SQLite e query

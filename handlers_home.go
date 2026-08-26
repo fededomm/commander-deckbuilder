@@ -5,67 +5,65 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
-func home(w http.ResponseWriter, r *http.Request) {
+func home(c echo.Context) error {
 	decks, err := listDecks(db)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	render(w, r, homePage(decks))
+	return render(c, homePage(decks))
 }
 
-func createDeckHandler(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(r.FormValue("name"))
+func createDeckHandler(c echo.Context) error {
+	name := strings.TrimSpace(c.FormValue("name"))
 	if name == "" {
-		http.Error(w, "nome obbligatorio", http.StatusBadRequest)
-		return
+		return echo.NewHTTPError(http.StatusBadRequest, "nome obbligatorio")
 	}
 	id, err := createDeck(db, name)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	w.Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
-	w.WriteHeader(http.StatusNoContent)
+	c.Response().Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
+	return c.NoContent(http.StatusNoContent)
 }
 
-func deleteDeckHandler(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
-	if !ok {
-		return
+func deleteDeckHandler(c echo.Context) error {
+	id, err := pathID(c)
+	if err != nil {
+		return err
 	}
-	if fail(w, deleteDeck(db, id)) { // le carte seguono via ON DELETE CASCADE
-		return
+	if err := deleteDeck(db, id); err != nil { // le carte seguono via ON DELETE CASCADE
+		return err
 	}
 	decks, err := listDecks(db)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	render(w, r, deckList(decks))
+	return render(c, deckList(decks))
 }
 
-func importHandler(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(r.FormValue("name"))
-	lines, skipped := parseMoxfield(r.FormValue("list"))
+func importHandler(c echo.Context) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	lines, skipped := parseMoxfield(c.FormValue("list"))
 	if len(lines) == 0 {
-		render(w, r, importError("nessuna riga riconosciuta"))
-		return
+		return render(c, importError("nessuna riga riconosciuta"))
 	}
-	rows, missing, err := resolvePrintings(r.Context(), lines)
+	rows, missing, err := resolvePrintings(c.Request().Context(), lines)
 	if err != nil {
-		render(w, r, importError(err.Error()))
-		return
+		return render(c, importError(err.Error()))
 	}
 	if len(rows) == 0 {
-		render(w, r, importError("nessuna carta risolta"))
-		return
+		return render(c, importError("nessuna carta risolta"))
 	}
 	id, err := createDeck(db, name)
-	if fail(w, err) {
-		return
+	if err != nil {
+		return err
 	}
-	if fail(w, insertCards(db, id, rows)) {
-		return
+	if err := insertCards(db, id, rows); err != nil {
+		return err
 	}
 	// se qualcosa non è stato importato l'utente deve saperlo prima di andarsene
 	lost := skipped
@@ -73,7 +71,7 @@ func importHandler(w http.ResponseWriter, r *http.Request) {
 		lost = append(lost, m.Name)
 	}
 	if len(lost) == 0 {
-		w.Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
+		c.Response().Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
 	}
-	render(w, r, importResult(id, len(rows), len(lines), lost))
+	return render(c, importResult(id, len(rows), len(lines), lost))
 }
