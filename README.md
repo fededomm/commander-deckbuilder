@@ -26,7 +26,7 @@ Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no
 - `*.templ` — le pagine; i `*_templ.go` accanto sono generati, non si modificano
 - `static/` — CSS, htmx, SVG dei simboli: finiscono **dentro** il binario con `go:embed`
 - `packaging/` — icone, script NSIS e `build.sh` che produce i pacchetti
-- `.github/workflows/release.yml` — build e release su tag
+- `.github/workflows/publish.yml` — build e release su tag
 
 ## Dove sta il database
 
@@ -53,13 +53,17 @@ binding C): tutti i target si compilano da Linux/WSL, ~12 MB l'uno.
 
 ### Release su GitHub
 
-Un tag fa tutto da solo:
-
 ```sh
-git tag v0.3.0 && git push origin v0.3.0
+git tag -a v0.3.0 -m v0.3.0 && git push origin v0.3.0
+gh workflow run publish.yml --ref v0.3.0    # se dopo un minuto non è partito niente
 ```
 
-`.github/workflows/release.yml` gira i test, costruisce i pacchetti su due runner
+Il push del tag dovrebbe bastare, ma su questo repo GitHub ogni tanto non emette
+l'evento e la build non parte: la seconda riga la fa partire lo stesso, puntando
+al tag. Il job di release è idempotente, quindi lanciarlo due volte allega i file
+invece di fallire.
+
+`.github/workflows/publish.yml` gira i test, costruisce i pacchetti su due runner
 (Ubuntu per Windows e Linux, macOS per il `.dmg`) e apre la release con i file
 allegati. `workflow_dispatch` fa la stessa build senza pubblicare, per provare.
 

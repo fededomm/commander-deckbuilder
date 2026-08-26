@@ -75,9 +75,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # Idempotente: se la release esiste già (rilancio a mano dopo un tag
+          # che non ha innescato niente) allega i file invece di fallire.
           gh release create "$GITHUB_REF_NAME" pacchetti/* \
             --title "$GITHUB_REF_NAME" \
-            --notes-file - <<'NOTES'
+            --notes-file - <<'NOTES' || gh release upload "$GITHUB_REF_NAME" pacchetti/* --clobber
           Scarica il pacchetto per il tuo sistema:
 
           | file | per |
