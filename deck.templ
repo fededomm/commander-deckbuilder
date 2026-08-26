@@ -1,0 +1,122 @@
+package main
+
+templ deckPage(deck Deck, cards []Card) {
+	@layout("Mazzo · " + deck.Name) {
+		<div class="split">
+			<div class="pane">
+				<a class="crumb" href="/">← tutti i mazzi</a>
+				<h2>1 · Cerca carte</h2>
+				<input
+					id="q"
+					name="q"
+					placeholder="Sol Ring, t:creature c:g, …"
+					autofocus
+					hx-get={ "/deck/" + itoa64(deck.ID) + "/search" }
+					hx-trigger="input changed delay:300ms"
+					hx-target="#results"
+				/>
+				<div id="results"></div>
+			</div>
+			<div class="pane">
+				@checklist(deck, cards)
+			</div>
+		</div>
+		<img id="preview" alt="" hidden/>
+	}
+}
+
+// checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, totali e righe.
+templ checklist(deck Deck, cards []Card) {
+	<div id="checklist" hx-target="this" hx-swap="outerHTML">
+		<a class="crumb" href="/">{ deck.Name }</a>
+		<h2>
+			2 · Checklist
+			<button
+				id="refresh"
+				title="Riallinea i prezzi a Scryfall"
+				hx-post={ "/deck/" + itoa64(deck.ID) + "/prices" }
+				hx-disabled-elt="this"
+			>↻ prezzi</button>
+			<a id="export" href={ "/deck/" + itoa64(deck.ID) + "/export" } title="Scarica in formato Moxfield">↓ esporta</a>
+			<span id="count">{ itoa(purchasedQty(cards)) } / { itoa(qty(cards)) } acquistate</span>
+		</h2>
+		<div id="total">{ totalsLine(cards) }</div>
+		<div id="deck">
+			for _, g := range groupByCategory(cards) {
+				<section>
+					<h3>{ g.Name } <span>{ itoa(g.Qty) } · { eur(g.Total) }</span></h3>
+					for _, c := range g.Cards {
+						@cardRow(c)
+					}
+				</section>
+			}
+		</div>
+	</div>
+}
+
+templ cardRow(c Card) {
+	<div class={ "row", templ.KV("done", c.Purchased) }>
+		<input
+			type="checkbox"
+			checked?={ c.Purchased }
+			title="Segna come acquistata"
+			aria-label={ "Acquistata: " + c.Name }
+			hx-post={ "/cards/" + itoa64(c.ID) + "/toggle" }
+		/>
+		if c.Image != "" {
+			<img class="thumb zoom" src={ thumbURL(c.Image) } alt="" loading="lazy" data-preview={ c.Image }/>
+		} else {
+			<span class="thumb"></span>
+		}
+		<span
+			class={ "name", templ.KV("zoom", c.Image != "") }
+			title={ c.TypeLine }
+			data-preview={ c.Image }
+		>
+			if c.Qty > 1 {
+				{ itoa(c.Qty) }× 
+			}
+			{ c.Name }
+			if c.Foil {
+				{ " ✦" }
+			}
+		</span>
+		<span class="cost mana">
+			@mana(c.ManaCost)
+		</span>
+		<span class="cost price">{ price0(c.PriceEUR) }</span>
+		<button class="del" title="Rimuovi" hx-delete={ "/cards/" + itoa64(c.ID) }>×</button>
+	</div>
+}
+
+templ mana(cost string) {
+	for _, p := range manaParts(cost) {
+		if p.SVG != "" {
+			<img class="sym" src={ "/static/symbols/" + p.SVG } alt={ p.Text } loading="lazy"/>
+		} else {
+			{ p.Text }
+		}
+	}
+}
+
+templ searchResults(deckID int64, cards []scryCard, err error) {
+	if err != nil {
+		<p class="empty">{ err.Error() }</p>
+	} else if len(cards) == 0 {
+		<p class="empty">Nessuna carta trovata.</p>
+	} else {
+		for _, c := range cards {
+			<button
+				class="hit"
+				hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
+				hx-vals={ scryVals(c.ID) }
+				hx-target="#checklist"
+				hx-swap="outerHTML"
+			>
+				<img src={ c.image() } alt="" loading="lazy"/>
+				<span><strong>{ c.Name }</strong><br/><small>{ c.TypeLine }</small></span>
+				<span class="cost">{ price0(c.price(false)) }</span>
+			</button>
+		}
+	}
+}

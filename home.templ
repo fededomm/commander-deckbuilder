@@ -1,0 +1,73 @@
+package main
+
+templ homePage(decks []Deck) {
+	@layout("Commander Deckbuilder") {
+		<div class="home">
+			<h1>I miei mazzi Commander</h1>
+			<form hx-post="/decks" hx-swap="none">
+				<input name="name" placeholder="Nome del nuovo mazzo" required autofocus/>
+				<button>Crea</button>
+			</form>
+			<details id="import-box">
+				<summary>Importa da Moxfield</summary>
+				<form
+					id="import"
+					hx-post="/import"
+					hx-target="#import-status"
+					hx-disabled-elt="find button"
+					hx-indicator="#import-status"
+				>
+					<input name="name" placeholder="Nome del mazzo" required/>
+					<textarea
+						name="list"
+						rows="10"
+						required
+						placeholder="1 Inalla, Archmage Ritualist (SLD) 1639&#10;1 Sol Ring (EOC) 57&#10;5 Island (SNC) 264"
+					></textarea>
+					<button>Importa</button>
+					<p id="import-status" class="empty"></p>
+				</form>
+			</details>
+			<div id="list">
+				@deckList(decks)
+			</div>
+		</div>
+	}
+}
+
+templ deckList(decks []Deck) {
+	if len(decks) == 0 {
+		<p class="empty">Nessun mazzo. Creane uno qui sopra.</p>
+	}
+	for _, d := range decks {
+		<div class="deck-item">
+			<a href={ "/deck/" + itoa64(d.ID) }><strong>{ d.Name }</strong></a>
+			<span class="cost">{ itoa(d.Cards) } carte · { itoa(d.Purchased) } acquistate</span>
+			<span class="cost price">{ eur(d.Total) }</span>
+			<button
+				class="del"
+				title="Elimina mazzo"
+				hx-delete={ "/decks/" + itoa64(d.ID) }
+				hx-target="#list"
+				hx-confirm={ "Eliminare \"" + d.Name + "\" e le sue " + itoa(d.Cards) + " carte?" }
+			>×</button>
+		</div>
+	}
+}
+
+// Esito dell'import: quante righe sono entrate e, soprattutto, quali no.
+templ importResult(deckID int64, imported, total int, lost []string) {
+	if len(lost) > 0 {
+		<span>
+			Importate { itoa(imported) } righe su { itoa(total) }. Non riconosciute:
+			{ joinLines(lost) }.
+			<a href={ "/deck/" + itoa64(deckID) }>Apri il mazzo →</a>
+		</span>
+	} else {
+		<span>Importate { itoa(imported) } carte. <a href={ "/deck/" + itoa64(deckID) }>Apri il mazzo →</a></span>
+	}
+}
+
+templ importError(msg string) {
+	<span>Import fallito: { msg }</span>
+}
