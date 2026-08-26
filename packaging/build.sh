@@ -7,7 +7,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-0.2.0}"
+# Di default la versione è l'ultimo tag: così non resta indietro a ogni release.
+VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')}"
+VERSION="${VERSION:-0.0.0-dev}"
 APPNAME="Commander Deckbuilder"
 OUT=dist
 TARGETS="${*:-windows macos linux}"

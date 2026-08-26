@@ -88,7 +88,11 @@ Installer **per utente singolo**: va in `%LOCALAPPDATA%\Programs`, non chiede
 l'amministratore, mette la voce nel menu Start e in "App installate" con il suo
 disinstallatore. L'eseguibile è compilato `-H windowsgui`, quindi niente finestra
 nera del prompt; in cambio non ha stderr, e scrive `deckbuilder.log` accanto al
-database. Disinstallando, i mazzi restano: li cancella solo se rispondi di sì
+database.
+
+Installer e disinstallatore fermano l'app se è in esecuzione (`taskkill`): senza,
+Windows terrebbe l'eseguibile bloccato e la disinstallazione lascerebbe cartella e
+processo vivi. Disinstallando, i mazzi restano: li cancella solo se rispondi di sì
 alla domanda esplicita.
 
 ### macOS

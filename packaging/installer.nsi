@@ -30,7 +30,18 @@ SetCompressor /SOLID lzma
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Italian"
 
+; L'app è un server: dopo aver chiuso la scheda del browser resta in esecuzione.
+; Windows non lascia cancellare un eseguibile in uso, quindi senza questo la
+; disinstallazione fallisce in silenzio e lascia cartella, exe e app viva.
+!macro StopApp
+  DetailPrint "Chiudo ${APP} se è in esecuzione..."
+  nsExec::Exec 'taskkill /F /IM "${EXE}"'
+  Pop $0
+  Sleep 700
+!macroend
+
 Section "Install"
+  !insertmacro StopApp   ; anche in aggiornamento: l'exe vecchio va liberato
   SetOutPath "$INSTDIR"
   File "..\dist\windows\${EXE}"
   File "icon.ico"
@@ -51,10 +62,14 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-  Delete "$INSTDIR\${EXE}"
-  Delete "$INSTDIR\icon.ico"
-  Delete "$INSTDIR\uninstall.exe"
-  RMDir  "$INSTDIR"
+  !insertmacro StopApp
+
+  ; /REBOOTOK: se qualcosa è ancora bloccato, Windows lo toglie al riavvio
+  ; invece di lasciarlo lì per sempre.
+  Delete /REBOOTOK "$INSTDIR\${EXE}"
+  Delete /REBOOTOK "$INSTDIR\icon.ico"
+  Delete /REBOOTOK "$INSTDIR\uninstall.exe"
+  RMDir /r /REBOOTOK "$INSTDIR"
 
   Delete "$SMPROGRAMS\${APP}\${APP}.lnk"
   Delete "$SMPROGRAMS\${APP}\Disinstalla ${APP}.lnk"
