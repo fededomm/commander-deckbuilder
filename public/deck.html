@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mazzo · Commander Deckbuilder</title>
+<link rel="stylesheet" href="style.css">
+
+<div class="split">
+  <div class="pane">
+    <a class="crumb" href="index.html">← tutti i mazzi</a>
+    <h2>1 · Cerca carte</h2>
+    <input id="q" placeholder="Sol Ring, t:creature c:g, …" autofocus>
+    <div id="results"></div>
+  </div>
+
+  <div class="pane">
+    <a class="crumb" id="deck-name"></a>
+    <h2>2 · Checklist
+      <button id="refresh" title="Riallinea i prezzi a Scryfall">↻ prezzi</button>
+      <button id="export" title="Scarica in formato Moxfield">↓ esporta</button>
+      <span id="count"></span></h2>
+    <div id="total"></div>
+    <div id="deck"></div>
+  </div>
+</div>
+
+<img id="preview" alt="" hidden>
+
+<script type="module" src="app.js"></script>
