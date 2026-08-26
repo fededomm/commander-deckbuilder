@@ -26,6 +26,10 @@ jobs:
           - os: macos-latest
             targets: macos
     runs-on: ${{ matrix.os }}
+    # I runner macOS a volte restano in coda per ore: dopo 25 minuti mollo e la
+    # release esce comunque, senza .dmg, invece di non uscire affatto.
+    timeout-minutes: 25
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6

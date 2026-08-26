@@ -62,6 +62,10 @@ git tag v0.3.0 && git push origin v0.3.0
 (Ubuntu per Windows e Linux, macOS per il `.dmg`) e apre la release con i file
 allegati. `workflow_dispatch` fa la stessa build senza pubblicare, per provare.
 
+Il job macOS ha `continue-on-error` e 25 minuti di timeout: quando i runner macOS
+di GitHub sono in coda, la release esce lo stesso con Windows e Linux invece di
+non uscire affatto. I pacchetti macOS si rifanno poi, anche in locale su un Mac.
+
 ### In locale
 
 ```sh
