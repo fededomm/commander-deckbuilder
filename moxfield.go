@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
@@ -72,12 +73,12 @@ func (l MoxfieldLine) identifier() identifier {
 
 // resolvePrintings mappa le righe Moxfield sulle stampe Scryfall.
 // missing sono le righe che Scryfall non ha riconosciuto.
-func resolvePrintings(lines []MoxfieldLine) (rows []Card, missing []MoxfieldLine, err error) {
+func resolvePrintings(ctx context.Context, lines []MoxfieldLine) (rows []Card, missing []MoxfieldLine, err error) {
 	ids := make([]identifier, len(lines))
 	for i, l := range lines {
 		ids[i] = l.identifier()
 	}
-	found, err := scryfallCollection(ids)
+	found, err := scryfallCollection(ctx, ids)
 	if err != nil {
 		return nil, nil, err
 	}

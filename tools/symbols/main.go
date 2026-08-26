@@ -4,16 +4,16 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 const userAgent = "commander-deckbuilder/0.2 (https://github.com/local)"
@@ -70,28 +70,29 @@ func main() {
 	fmt.Printf("%d simboli, %d KB in static/symbols/\n", len(files), bytes/1024)
 }
 
+var client = resty.New().
+	SetHeader("User-Agent", userAgent).
+	SetHeader("Accept", "*/*").
+	SetTimeout(30 * time.Second)
+
 func get(url string, out any) error {
-	b, err := download(url)
+	res, err := client.R().SetResult(out).Get(url)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(b, out)
+	if res.IsError() {
+		return fmt.Errorf("HTTP %d", res.StatusCode())
+	}
+	return nil
 }
 
 func download(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
+	res, err := client.R().Get(url)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "*/*")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	if res.IsError() {
+		return nil, fmt.Errorf("HTTP %d", res.StatusCode())
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", res.StatusCode)
-	}
-	return io.ReadAll(res.Body)
+	return res.Body(), nil
 }

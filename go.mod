@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/a-h/templ v0.3.1020
+	github.com/go-resty/resty/v2 v2.17.2
 	modernc.org/sqlite v1.57.0
 )
 

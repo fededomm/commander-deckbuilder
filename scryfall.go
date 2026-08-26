@@ -1,24 +1,40 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 // Scryfall chiede uno User-Agent identificabile e ~100ms fra le richieste.
 // Dal browser lo faceva il browser, qui tocca a noi.
 const userAgent = "commander-deckbuilder/0.2 (https://github.com/local)"
 
-var scryClient = &http.Client{Timeout: 20 * time.Second}
+var scryfall = resty.New().
+	SetBaseURL("https://api.scryfall.com").
+	SetHeader("User-Agent", userAgent).
+	SetHeader("Accept", "application/json"). // Scryfall rifiuta senza, anche in POST
+	SetTimeout(20 * time.Second)
 
 // Su una ricerca senza risultati Scryfall risponde 404: non è un errore da mostrare.
 var errNotFound = errors.New("nessun risultato")
+
+// scryError è il corpo che Scryfall manda sugli errori: "details" spiega cosa manca.
+type scryError struct {
+	Details string `json:"details"`
+}
+
+func restErr(res *resty.Response) error {
+	if e, ok := res.Error().(*scryError); ok && e.Details != "" {
+		return fmt.Errorf("Scryfall %d: %s", res.StatusCode(), e.Details)
+	}
+	return fmt.Errorf("Scryfall %d", res.StatusCode())
+}
 
 type scryCard struct {
 	ID              string            `json:"id"`
@@ -77,49 +93,49 @@ func (c scryCard) toCard(qty int, foil bool) Card {
 	}
 }
 
-func scryfallGet(path string, out any) error {
-	req, err := http.NewRequest("GET", "https://api.scryfall.com"+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/json")
-	res, err := scryClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode == http.StatusNotFound {
-		return errNotFound
-	}
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Scryfall %d", res.StatusCode)
-	}
-	return json.NewDecoder(res.Body).Decode(out)
+// cardList è la forma di risposta di /cards/search e /cards/collection.
+type cardList struct {
+	Data []scryCard `json:"data"`
+}
+
+func request(ctx context.Context, result any) *resty.Request {
+	return scryfall.R().SetContext(ctx).SetResult(result).SetError(&scryError{})
 }
 
 // scryfallSearch: 0 risultati non è un errore, Scryfall risponde 404 su "nessun match".
-func scryfallSearch(q string) ([]scryCard, error) {
-	var body struct {
-		Data []scryCard `json:"data"`
-	}
-	err := scryfallGet("/cards/search?unique=cards&q="+url.QueryEscape(q), &body)
-	if err == errNotFound {
-		return nil, nil
-	}
+func scryfallSearch(ctx context.Context, q string) ([]scryCard, error) {
+	var list cardList
+	res, err := request(ctx, &list).
+		SetQueryParams(map[string]string{"unique": "cards", "q": q}).
+		Get("/cards/search")
 	if err != nil {
 		return nil, err
 	}
-	if len(body.Data) > 30 {
-		body.Data = body.Data[:30]
+	if res.StatusCode() == http.StatusNotFound {
+		return nil, nil
 	}
-	return body.Data, nil
+	if res.IsError() {
+		return nil, restErr(res)
+	}
+	if len(list.Data) > 30 {
+		list.Data = list.Data[:30]
+	}
+	return list.Data, nil
 }
 
-func scryfallCard(id string) (scryCard, error) {
+func scryfallCard(ctx context.Context, id string) (scryCard, error) {
 	var c scryCard
-	err := scryfallGet("/cards/"+url.PathEscape(id), &c)
-	return c, err
+	res, err := request(ctx, &c).SetPathParam("id", id).Get("/cards/{id}")
+	if err != nil {
+		return c, err
+	}
+	if res.StatusCode() == http.StatusNotFound {
+		return c, errNotFound
+	}
+	if res.IsError() {
+		return c, restErr(res)
+	}
+	return c, nil
 }
 
 // identifier è una riga della richiesta /cards/collection: id, oppure set+numero,
@@ -133,38 +149,21 @@ type identifier struct {
 
 // scryfallCollection risolve identificatori in stampe. L'endpoint accetta max 75
 // identifiers per richiesta, quindi spezza in blocchi.
-func scryfallCollection(ids []identifier) ([]scryCard, error) {
+func scryfallCollection(ctx context.Context, ids []identifier) ([]scryCard, error) {
 	var out []scryCard
 	for i := 0; i < len(ids); i += 75 {
 		chunk := ids[i:min(i+75, len(ids))]
-		payload, err := json.Marshal(map[string]any{"identifiers": chunk})
+		var list cardList
+		res, err := request(ctx, &list).
+			SetBody(map[string]any{"identifiers": chunk}).
+			Post("/cards/collection")
 		if err != nil {
 			return nil, err
 		}
-		req, err := http.NewRequest("POST", "https://api.scryfall.com/cards/collection", bytes.NewReader(payload))
-		if err != nil {
-			return nil, err
+		if res.IsError() {
+			return nil, restErr(res)
 		}
-		req.Header.Set("User-Agent", userAgent)
-		req.Header.Set("Accept", "application/json") // Scryfall rifiuta senza, anche in POST
-		req.Header.Set("Content-Type", "application/json")
-		res, err := scryClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		var body struct {
-			Data    []scryCard `json:"data"`
-			Details string     `json:"details"`
-		}
-		err = json.NewDecoder(res.Body).Decode(&body)
-		res.Body.Close()
-		if res.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("Scryfall %d: %s", res.StatusCode, body.Details)
-		}
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, body.Data...)
+		out = append(out, list.Data...)
 		if i+75 < len(ids) {
 			time.Sleep(100 * time.Millisecond) // rate limit chiesto da Scryfall
 		}
