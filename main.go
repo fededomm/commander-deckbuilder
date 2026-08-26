@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"time"
 )
 
 //go:generate go tool templ generate
@@ -28,6 +29,8 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "non aprire il browser all'avvio")
 	dbPath := flag.String("db", defaultDBPath(), "percorso del file SQLite")
 	port := flag.Int("port", 8090, "porta HTTP (0 = una libera qualsiasi)")
+	idleQuit := flag.Duration("idle-quit", 5*time.Second,
+		"esce dopo questo tempo senza finestre aperte (0 = resta acceso)")
 	flag.Parse()
 
 	dataDir := filepath.Dir(*dbPath)
@@ -49,6 +52,9 @@ func main() {
 	log.Printf("%s — db: %s", url, *dbPath)
 	if !*noBrowser {
 		openBrowser(url)
+	}
+	if *idleQuit > 0 {
+		go watchIdle(*idleQuit)
 	}
 	log.Fatal(http.Serve(ln, routes()))
 }

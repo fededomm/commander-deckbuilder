@@ -3,10 +3,8 @@ package main
 
 import (
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -76,15 +74,4 @@ func importHandler(c echo.Context) error {
 		c.Response().Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
 	}
 	return render(c, importResult(id, len(rows), len(lines), lost))
-}
-
-// quitHandler spegne il server. Installato non c'è una console da chiudere:
-// senza questa rotta l'unico modo di fermarlo sarebbe il task manager.
-func quitHandler(c echo.Context) error {
-	go func() {
-		time.Sleep(300 * time.Millisecond) // il tempo di far uscire la risposta
-		db.Close()                         // SQLite è già durevole dopo il COMMIT
-		os.Exit(0)
-	}()
-	return c.HTML(http.StatusOK, `<p class="empty">Server fermato. Puoi chiudere la scheda.</p>`)
 }

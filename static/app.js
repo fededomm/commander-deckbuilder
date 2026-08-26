@@ -16,3 +16,8 @@ addEventListener("keydown", (e) => {
   const preview = document.getElementById("preview");
   if (e.key === "Escape" && preview) preview.hidden = true;
 });
+
+// Connessione che resta aperta finché la pagina è aperta: quando chiudi la
+// finestra cade e il server si ferma da solo. Fra una pagina e l'altra si
+// riapre da sé, e il server aspetta qualche secondo prima di arrendersi.
+new EventSource("/alive");

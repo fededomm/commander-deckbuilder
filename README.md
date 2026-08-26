@@ -15,6 +15,7 @@ go run ./tools/symbols # riscarica gli SVG dei simboli (solo se Scryfall ne aggi
 Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no-browser`.
 
 - `main.go` — avvio: flag, scelta del DB, porta, apertura del browser
+- `lifecycle.go` — `/alive`, spegnimento a finestre chiuse, `/quit`
 - `routes.go` — le rotte echo, l'error handler e gli helper condivisi
 - `handlers_home.go` — elenco mazzi, creazione, cancellazione, import Moxfield
 - `handlers_deck.go` — pagina mazzo: ricerca, checklist, prezzi, export
@@ -117,9 +118,17 @@ quelle serve un Mac.
 
 ### Fermare l'app
 
-Installata non ha una console da chiudere: il server continua a girare anche
-dopo aver chiuso la scheda del browser. In fondo alla home c'è
-"⏻ chiudi l'applicazione", che è l'unico modo pulito di fermarlo.
+**Chiudendo la finestra il server si ferma da solo.** Ogni pagina tiene aperta
+una connessione SSE su `/alive`: quando il browser chiude, il TCP cade e il
+server se ne accorge subito. Aspetta `-idle-quit` (5 secondi di default) prima
+di uscire, altrimenti morirebbe ogni volta che passi dalla home a un mazzo.
+
+`-idle-quit 0` lo lascia acceso per sempre, comodo in sviluppo. In fondo alla
+home resta "⏻ chiudi l'applicazione" per fermarlo subito senza aspettare.
+
+Nota: se il browser scarta la scheda in background (Chrome lo fa dopo un po'
+di inattività) l'app esce come se l'avessi chiusa. Alza `-idle-quit` se dà
+fastidio.
 
 ## Import/export Moxfield
 
@@ -144,3 +153,5 @@ Restituiscono frammenti HTML per htmx, non JSON.
 | `GET /deck/:id/export` | scarica in formato Moxfield |
 | `POST /cards/:id/toggle` | inverte "acquistata" |
 | `DELETE /cards/:id` | rimuove la carta |
+| `GET /alive` | resta aperta finché la pagina è aperta; se cadono tutte, il server esce |
+| `POST /quit` | ferma il server subito |
