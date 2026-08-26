@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+# Due tag ravvicinati non devono pubblicare in contemporanea sulla stessa release.
+concurrency:
+  group: release-${{ github.ref }}
+
 jobs:
   build:
     strategy:
