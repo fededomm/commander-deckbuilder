@@ -31,14 +31,6 @@ templ homePage(decks []Deck) {
 			<div id="list">
 				@deckList(decks)
 			</div>
-			<p id="quit">
-				<button
-					class="del"
-					hx-post="/quit"
-					hx-target="#list"
-					hx-confirm="Fermare il server? I mazzi restano salvati."
-				>⏻ chiudi l'applicazione</button>
-			</p>
 		</div>
 	}
 }

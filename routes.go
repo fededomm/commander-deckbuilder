@@ -31,7 +31,6 @@ func routes() *echo.Echo {
 	e.POST("/decks", createDeckHandler)
 	e.DELETE("/decks/:id", deleteDeckHandler)
 	e.POST("/import", importHandler)
-	e.POST("/quit", quitHandler)
 	e.GET("/alive", aliveHandler) // resta aperta finché la pagina è aperta
 
 	e.GET("/deck/:id", deckPageHandler)

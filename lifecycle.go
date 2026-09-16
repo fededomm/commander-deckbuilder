@@ -49,22 +49,8 @@ func watchIdle(grace time.Duration) {
 		}
 		if idle += time.Second; idle >= grace {
 			log.Printf("nessuna finestra aperta da %s, esco", grace)
-			shutdown()
+			db.Close() // SQLite è già durevole dopo il COMMIT, questo chiude il file pulito
+			os.Exit(0)
 		}
 	}
-}
-
-// quitHandler è la via esplicita: il bottone in fondo alla home, per fermare
-// l'app senza aspettare che scada l'attesa.
-func quitHandler(c echo.Context) error {
-	go func() {
-		time.Sleep(300 * time.Millisecond) // il tempo di far uscire la risposta
-		shutdown()
-	}()
-	return c.HTML(http.StatusOK, `<p class="empty">Server fermato. Puoi chiudere la scheda.</p>`)
-}
-
-func shutdown() {
-	db.Close() // SQLite è già durevole dopo il COMMIT, questo chiude il file pulito
-	os.Exit(0)
 }
