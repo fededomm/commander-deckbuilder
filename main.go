@@ -29,6 +29,7 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "non aprire il browser all'avvio")
 	dbPath := flag.String("db", defaultDBPath(), "percorso del file SQLite")
 	port := flag.Int("port", 8090, "porta HTTP (0 = una libera qualsiasi)")
+	host := flag.String("host", "localhost", "interfaccia su cui ascoltare (\"\" = tutte, per il deploy)")
 	idleQuit := flag.Duration("idle-quit", 5*time.Second,
 		"esce dopo questo tempo senza finestre aperte (0 = resta acceso)")
 	flag.Parse()
@@ -44,7 +45,7 @@ func main() {
 	}
 	defer db.Close()
 
-	ln, err := listen(*port)
+	ln, err := listen(*host, *port)
 	if err != nil {
 		log.Fatalf("porta: %v", err)
 	}
@@ -75,13 +76,13 @@ func logToFile(dir string) {
 
 // listen prova la porta chiesta; se è occupata ne prende una libera invece di
 // morire — l'utente ha fatto doppio clic due volte, non è un errore da segnalare.
-func listen(port int) (net.Listener, error) {
-	ln, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
+func listen(host string, port int) (net.Listener, error) {
+	ln, err := net.Listen("tcp", host+":"+strconv.Itoa(port))
 	if err == nil || port == 0 {
 		return ln, err
 	}
 	log.Printf("porta %d occupata, ne uso una libera", port)
-	return net.Listen("tcp", "localhost:0")
+	return net.Listen("tcp", host+":0")
 }
 
 // defaultDBPath: se c'è un data.db nella cartella corrente uso quello (sviluppo,

@@ -1,0 +1,7 @@
+.git
+dist
+packaging
+tools
+data.db*
+commander-deckbuilder
+*.syso
