@@ -2,11 +2,15 @@ package main
 
 templ homePage(decks []Deck) {
 	@layout("Commander Deckbuilder") {
-		<div class="home">
-			<h1>I miei mazzi Commander</h1>
-			<form hx-post="/decks" hx-swap="none">
-				<input name="name" placeholder="Nome del nuovo mazzo" required autofocus/>
-				<button>Crea</button>
+		<main class="home">
+			<header class="home-head">
+				<h1>I miei mazzi Commander</h1>
+				<p class="sub">Cerca su Scryfall, spunta quello che hai comprato, tieni d'occhio la spesa.</p>
+			</header>
+			<form class="new-deck" hx-post="/decks" hx-swap="none">
+				<label class="sr-only" for="new-name">Nome del nuovo mazzo</label>
+				<input id="new-name" name="name" placeholder="Nome del nuovo mazzo" required autofocus/>
+				<button class="btn-primary">Crea mazzo</button>
 			</form>
 			<details id="import-box">
 				<summary>Importa da Moxfield</summary>
@@ -17,41 +21,75 @@ templ homePage(decks []Deck) {
 					hx-disabled-elt="find button"
 					hx-indicator="#import-status"
 				>
-					<input name="name" placeholder="Nome del mazzo" required/>
+					<label class="sr-only" for="import-name">Nome del mazzo da importare</label>
+					<input id="import-name" name="name" placeholder="Nome del mazzo" required/>
+					<label class="sr-only" for="import-list">Lista in formato Moxfield</label>
 					<textarea
+						id="import-list"
 						name="list"
 						rows="10"
 						required
 						placeholder="1 Inalla, Archmage Ritualist (SLD) 1639&#10;1 Sol Ring (EOC) 57&#10;5 Island (SNC) 264"
 					></textarea>
-					<button>Importa</button>
-					<p id="import-status" class="empty"></p>
+					<button class="btn-primary">Importa</button>
+					<p id="import-status" class="note" role="status" aria-live="polite"></p>
 				</form>
 			</details>
 			<div id="list">
 				@deckList(decks)
 			</div>
-		</div>
+		</main>
 	}
 }
 
 templ deckList(decks []Deck) {
 	if len(decks) == 0 {
-		<p class="empty">Nessun mazzo. Creane uno qui sopra.</p>
+		<p class="empty-state">
+			<strong>Nessun mazzo, per ora.</strong>
+			Dai un nome al primo qui sopra, oppure incolla una lista Moxfield.
+		</p>
 	}
 	for _, d := range decks {
-		<div class="deck-item">
-			<a href={ "/deck/" + itoa64(d.ID) }><strong>{ d.Name }</strong></a>
-			<span class="cost">{ itoa(d.Cards) } carte · { itoa(d.Purchased) } acquistate</span>
-			<span class="cost price">{ eur(d.Total) }</span>
+		<article class="deck-item">
+			<a class="deck-link" href={ "/deck/" + itoa64(d.ID) }>
+				<span class="deck-title">
+					<strong>{ d.Name }</strong>
+					@pips(d.Colors)
+				</span>
+				<span class="deck-meta">
+					if d.Cards == 0 {
+						Mazzo vuoto
+					} else {
+						{ itoa(d.Purchased) } di { itoa(d.Cards) } carte acquistate
+					}
+				</span>
+				if d.Cards > 0 {
+					<span
+						class="progress"
+						role="img"
+						aria-label={ itoa(pct(d.Purchased, d.Cards)) + "% del mazzo acquistato" }
+					>
+						<span style={ barWidth(pct(d.Purchased, d.Cards)) }></span>
+					</span>
+				}
+			</a>
+			<span class="deck-price">
+				<strong>{ eur(d.Total) }</strong>
+				if d.Todo > 0 {
+					<small>{ eur(d.Todo) } da comprare</small>
+				}
+			</span>
 			<button
-				class="del"
+				class="icon-btn danger"
+				aria-label={ "Elimina il mazzo " + d.Name }
 				title="Elimina mazzo"
 				hx-delete={ "/decks/" + itoa64(d.ID) }
 				hx-target="#list"
 				hx-confirm={ "Eliminare \"" + d.Name + "\" e le sue " + itoa(d.Cards) + " carte?" }
-			>×</button>
-		</div>
+			>
+				@iconTrash()
+			</button>
+		</article>
 	}
 }
 
@@ -69,5 +107,6 @@ templ importResult(deckID int64, imported, total int, lost []string) {
 }
 
 templ importError(msg string) {
-	<span>Import fallito: { msg }</span>
+	// un import fallito deve leggersi come fallito, non come una nota qualsiasi
+	<span class="error">Import fallito: { msg }</span>
 }

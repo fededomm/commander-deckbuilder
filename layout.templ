@@ -6,7 +6,10 @@ templ layout(title string) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="description" content="Costruisci mazzi Commander, tieni la lista della spesa e i prezzi Cardmarket aggiornati."/>
+			<meta name="theme-color" content="#0b0a0f"/>
 			<title>{ title }</title>
+			<link rel="icon" href="/static/icon.png" type="image/png"/>
 			<link rel="stylesheet" href="/static/style.css"/>
 			<script src="/static/htmx.min.js"></script>
 			<script src="/static/app.js" defer></script>
@@ -15,4 +18,16 @@ templ layout(title string) {
 			{ children... }
 		</body>
 	</html>
+}
+
+// pips: i pallini dell'identità di colore, es. "WUB". Vuoto se il mazzo è incolore,
+// così non resta un buco nel layout.
+templ pips(colors string) {
+	if colors != "" {
+		<span class="pips" title={ colorName(colors) } aria-label={ "Colori: " + colorName(colors) } role="img">
+			for _, c := range colors {
+				<span class={ "pip", "pip-" + string(c) }></span>
+			}
+		</span>
+	}
 }

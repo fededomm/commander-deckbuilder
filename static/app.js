@@ -1,14 +1,17 @@
-// Anteprima grande in basso a sinistra: riclicco la stessa carta e sparisce.
+// Anteprima grande in basso a destra: riclicco la stessa carta e sparisce.
 // Delegato sul document perché htmx rimpiazza le righe di continuo.
 addEventListener("click", (e) => {
   const preview = document.getElementById("preview");
   if (!preview) return;
   if (e.target === preview) return (preview.hidden = true);
 
-  const src = e.target.closest("[data-preview]")?.dataset.preview;
+  const el = e.target.closest("[data-preview]");
+  const src = el?.dataset.preview;
   if (!src) return;
   if (!preview.hidden && preview.src === src) return (preview.hidden = true);
   preview.src = src;
+  // L'anteprima è il contenuto, non una decorazione: senza nome è muta.
+  preview.alt = el.dataset.previewAlt ? "Carta: " + el.dataset.previewAlt : "";
   preview.hidden = false;
 });
 

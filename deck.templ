@@ -2,69 +2,203 @@ package main
 
 templ deckPage(deck Deck, cards []Card) {
 	@layout("Mazzo · " + deck.Name) {
-		<div class="split">
-			<div class="pane">
-				<a class="crumb" href="/">← tutti i mazzi</a>
-				<h2>1 · Cerca carte</h2>
+		<div class="deck-page">
+			@checklist(deck, cards)
+			<aside class="finder" id="finder">
+				<h2>
+					@iconSearch()
+					Cerca carte
+				</h2>
+				<label class="sr-only" for="q">Cerca su Scryfall</label>
 				<input
 					id="q"
 					name="q"
 					placeholder="Sol Ring, t:creature c:g, …"
 					autofocus
+					autocomplete="off"
 					hx-get={ "/deck/" + itoa64(deck.ID) + "/search" }
 					hx-trigger="input changed delay:300ms"
 					hx-target="#results"
+					hx-indicator="#searching"
 				/>
+				<p id="searching" class="note htmx-indicator" role="status" aria-live="polite">Cerco su Scryfall…</p>
+				<p class="hint">
+					Vale la sintassi di Scryfall: <code>t:creature</code>, <code>c:g</code>, <code>cmc&lt;=3</code>.
+				</p>
 				<div id="results"></div>
-			</div>
-			<div class="pane">
-				@checklist(deck, cards)
-			</div>
+			</aside>
 		</div>
 		<img id="preview" alt="" hidden/>
 	}
 }
 
-// checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, totali e righe.
+// checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, statistiche
+// e righe. L'intestazione sta dentro perché i totali cambiano a ogni spunta.
 templ checklist(deck Deck, cards []Card) {
+	{{ t := totals(cards) }}
+	{{ bought, total := purchasedQty(cards), qty(cards) }}
 	<div id="checklist" hx-target="this" hx-swap="outerHTML">
-		<a class="crumb" href="/">{ deck.Name }</a>
-		<h2>
-			2 · Checklist
-			<button
-				id="refresh"
-				title="Riallinea i prezzi a Scryfall"
-				hx-post={ "/deck/" + itoa64(deck.ID) + "/prices" }
-				hx-disabled-elt="this"
-			>↻ prezzi</button>
-			<a id="export" href={ "/deck/" + itoa64(deck.ID) + "/export" } title="Scarica in formato Moxfield">↓ esporta</a>
-			<span id="count">{ itoa(purchasedQty(cards)) } / { itoa(qty(cards)) } acquistate</span>
-		</h2>
-		<div id="total">{ totalsLine(cards) }</div>
-		<div id="deck">
-			for _, g := range groupByCategory(cards) {
-				<section>
-					<h3>{ g.Name } <span>{ itoa(g.Qty) } · { eur(g.Total) }</span></h3>
-					for _, c := range g.Cards {
-						@cardRow(c)
-					}
-				</section>
+		<header class="deck-bar">
+			<a class="crumb" href="/">
+				@iconBack()
+				Tutti i mazzi
+			</a>
+			<div class="deck-id">
+				<h1>{ deck.Name }</h1>
+				@pips(deckColors(cards))
+			</div>
+			if total > 0 {
+				<p class="deck-counts">
+					<strong>{ itoa(bought) }/{ itoa(total) }</strong> acquistate
+					<span class="sep">·</span>
+					<strong>{ eur(t.Total) }</strong>
+				</p>
 			}
-		</div>
+			<div class="deck-actions">
+				<a class="btn-ghost only-narrow" href="#finder">
+					@iconPlus()
+					Aggiungi
+				</a>
+				<button
+					id="refresh"
+					class="btn-ghost"
+					aria-label="Riallinea i prezzi a Scryfall"
+					hx-post={ "/deck/" + itoa64(deck.ID) + "/prices" }
+					hx-disabled-elt="this"
+				>
+					@iconRefresh()
+					Prezzi
+				</button>
+				<a
+					id="export"
+					class="btn-ghost"
+					href={ "/deck/" + itoa64(deck.ID) + "/export" }
+					aria-label="Scarica il mazzo in formato Moxfield"
+				>
+					@iconDownload()
+					Esporta
+				</a>
+			</div>
+		</header>
+		if total == 0 {
+			<p class="empty-state">
+				<strong>Il mazzo è vuoto.</strong>
+				Cerca una carta nel pannello di ricerca e clicca il risultato per aggiungerla.
+			</p>
+		} else {
+			<section class="deck-stats" aria-label="Statistiche del mazzo">
+				<div class="figures">
+					<div class="figure wide">
+						<dt>Avanzamento acquisti</dt>
+						<dd>
+							{ itoa(pct(bought, total)) }%
+							<span class="progress" aria-hidden="true">
+								<span style={ barWidth(pct(bought, total)) }></span>
+							</span>
+						</dd>
+					</div>
+					<div class="figure">
+						<dt>Da comprare</dt>
+						<dd>{ eur(t.Todo) }</dd>
+					</div>
+					<div class="figure">
+						<dt>Valore totale</dt>
+						<dd>{ eur(t.Total) }</dd>
+					</div>
+					if t.Unpriced > 0 {
+						<div class="figure">
+							<dt>Senza quotazione</dt>
+							<dd>{ itoa(t.Unpriced) }</dd>
+						</div>
+					}
+				</div>
+				@manaCurveChart(cards)
+				@colorSpread(cards)
+			</section>
+			<div id="deck">
+				for _, g := range groupByCategory(cards) {
+					<section>
+						<h3>
+							{ g.Name }
+							<span>{ itoa(g.Qty) } · { eur(g.Total) }</span>
+						</h3>
+						for _, c := range g.Cards {
+							@cardRow(c)
+						}
+					</section>
+				}
+			</div>
+		}
 	</div>
+}
+
+// manaCurveChart: barre in CSS puro, nessuna libreria. aria-label porta gli stessi
+// numeri a chi il grafico non lo vede.
+templ manaCurveChart(cards []Card) {
+	{{ bars := manaCurve(cards) }}
+	if len(bars) > 0 {
+		<figure class="curve-box">
+			<figcaption>Curva di mana <small>(terre escluse)</small></figcaption>
+			<div class="curve" role="img" aria-label={ curveLabel(bars) }>
+				for _, b := range bars {
+					<div class="curve-col">
+						<span class="curve-n">
+							if b.Qty > 0 {
+								{ itoa(b.Qty) }
+							}
+						</span>
+						<span class="curve-track">
+							<span class="curve-bar" style={ barHeight(b.Pct) }></span>
+						</span>
+						<span class="curve-x">{ b.Label }</span>
+					</div>
+				}
+			</div>
+		</figure>
+	}
+}
+
+// colorSpread: quante carte per colore. Una multicolore conta in ogni suo colore.
+templ colorSpread(cards []Card) {
+	{{ stats := colorStats(cards) }}
+	if len(stats) > 0 {
+		<figure class="colors-box">
+			<figcaption>Colori</figcaption>
+			<ul class="colors">
+				for _, s := range stats {
+					<li>
+						<span class={ "pip", "pip-" + s.Code } aria-hidden="true"></span>
+						{ s.Name }
+						<b>{ itoa(s.Qty) }</b>
+					</li>
+				}
+			</ul>
+		</figure>
+	}
 }
 
 templ cardRow(c Card) {
 	<div class={ "row", templ.KV("done", c.Purchased) }>
-		<input
-			type="checkbox"
-			checked?={ c.Purchased }
-			title="Segna come acquistata"
-			aria-label={ "Acquistata: " + c.Name }
-			hx-post={ "/cards/" + itoa64(c.ID) + "/toggle" }
-		/>
+		// label attorno alla casella: l'area cliccabile arriva a 44px senza
+		// ingrassare la casella stessa
+		<label class="check-box">
+			<input
+				class="check"
+				type="checkbox"
+				checked?={ c.Purchased }
+				aria-label={ "Acquistata: " + c.Name }
+				hx-post={ "/cards/" + itoa64(c.ID) + "/toggle" }
+			/>
+		</label>
 		if c.Image != "" {
-			<img class="thumb zoom" src={ thumbURL(c.Image) } alt="" loading="lazy" data-preview={ c.Image }/>
+			<img
+				class="thumb zoom"
+				src={ thumbURL(c.Image) }
+				alt=""
+				loading="lazy"
+				data-preview={ c.Image }
+				data-preview-alt={ c.Name }
+			/>
 		} else {
 			<span class="thumb"></span>
 		}
@@ -72,20 +206,28 @@ templ cardRow(c Card) {
 			class={ "name", templ.KV("zoom", c.Image != "") }
 			title={ c.TypeLine }
 			data-preview={ c.Image }
+			data-preview-alt={ c.Name }
 		>
 			if c.Qty > 1 {
-				{ itoa(c.Qty) }× 
+				<span class="qty">{ itoa(c.Qty) }×</span>
 			}
 			{ c.Name }
 			if c.Foil {
-				{ " ✦" }
+				<span class="foil" title="Foil" aria-label="foil">✦</span>
 			}
 		</span>
 		<span class="cost mana">
 			@mana(c.ManaCost)
 		</span>
 		<span class="cost price">{ price0(c.PriceEUR) }</span>
-		<button class="del" title="Rimuovi" hx-delete={ "/cards/" + itoa64(c.ID) }>×</button>
+		<button
+			class="icon-btn danger"
+			aria-label={ "Rimuovi " + c.Name + " dal mazzo" }
+			title="Rimuovi"
+			hx-delete={ "/cards/" + itoa64(c.ID) }
+		>
+			@iconTrash()
+		</button>
 	</div>
 }
 
@@ -101,9 +243,9 @@ templ mana(cost string) {
 
 templ searchResults(deckID int64, cards []scryCard, err error) {
 	if err != nil {
-		<p class="empty">{ err.Error() }</p>
+		<p class="note error">{ err.Error() }</p>
 	} else if len(cards) == 0 {
-		<p class="empty">Nessuna carta trovata.</p>
+		<p class="note">Nessuna carta trovata.</p>
 	} else {
 		for _, c := range cards {
 			<button
@@ -114,8 +256,11 @@ templ searchResults(deckID int64, cards []scryCard, err error) {
 				hx-swap="outerHTML"
 			>
 				<img src={ c.image() } alt="" loading="lazy"/>
-				<span><strong>{ c.Name }</strong><br/><small>{ c.TypeLine }</small></span>
-				<span class="cost">{ price0(c.price(false)) }</span>
+				<span class="hit-text">
+					<strong>{ c.Name }</strong>
+					<small>{ c.TypeLine }</small>
+				</span>
+				<span class="cost price">{ price0(c.price(false)) }</span>
 			</button>
 		}
 	}

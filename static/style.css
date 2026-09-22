@@ -1,85 +1,529 @@
-:root { color-scheme: dark; --bg:#16151a; --card:#211f28; --line:#332f3d; --fg:#e9e6f0; --dim:#9a93ad; --accent:#7c5cff; }
+/* Commander Deckbuilder — foglio unico, nessun build step.
+   La palette è tarata sul contrasto: ogni coppia testo/fondo qui sotto sta
+   sopra 4.5:1, i bordi sopra 1.9:1 sul fondo. I cinque colori di Magic non
+   sono decorazione, sono l'unico modo per leggere un mazzo a colpo d'occhio. */
+
+:root {
+	color-scheme: dark;
+
+	--bg: #0b0a0f;
+	--surface: #1f1c2b;
+	--surface-2: #2a2639;
+	--line: #443d57;
+	--line-soft: #332e44;
+	--fg: #ece9f2;         /* 13.9:1 su --surface */
+	--dim: #a49cb8;        /* 6.4:1 su --surface */
+	--accent: #6d4aff;     /* testo bianco sopra: 5.2:1 */
+	--accent-soft: #9d7bff;/* 6.3:1 sul fondo: la versione da usare come testo */
+	--err: #ff7b7b;
+
+	/* WUBRG, alzati di luminosità quanto basta per stare sopra 6.6:1 sul fondo */
+	--mana-w: #f2e3b6;
+	--mana-u: #7ab3ee;
+	--mana-b: #a996c9;
+	--mana-r: #f0806b;
+	--mana-g: #63c98a;
+
+	--radius: 10px;
+	--pad: 1.25rem;
+
+	/* scala z-index: niente numeri a caso sparsi nel file */
+	--z-bar: 20;
+	--z-preview: 30;
+}
+
 * { box-sizing: border-box; }
-body { margin:0; font:15px/1.4 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
-a { color:inherit; }
-h2 { margin:0 0 .75rem; font-size:1rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
-h3 { margin:1.25rem 0 .4rem; font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
-     border-bottom:1px solid var(--line); padding-bottom:.3rem; }
-h3 span { float:right; }
-input[type=text], input:not([type]) { padding:.6rem .8rem; border:1px solid var(--line); border-radius:8px;
-                                      background:var(--card); color:var(--fg); font:inherit; font-size:1rem; }
-.empty { color:var(--dim); }
-.cost { color:var(--dim); font-size:.85rem; white-space:nowrap; }
-.price { min-width:4.5rem; text-align:right; }
 
-/* --- home --- */
-.home { max-width:640px; margin:0 auto; padding:3rem 1rem; }
-.home h1 { font-size:1.4rem; margin:0 0 1.5rem; }
-.home form { display:flex; gap:.5rem; margin-bottom:1.5rem; }
-.home form input { flex:1; }
-.home form button { padding:0 1rem; border:0; border-radius:8px; background:var(--accent); color:#fff;
-                    font:inherit; font-weight:600; cursor:pointer; }
-.deck-item { display:flex; align-items:center; gap:.6rem; padding:.7rem .9rem; margin-bottom:.5rem;
-             border:1px solid var(--line); border-radius:8px; background:var(--card); text-decoration:none; }
-.deck-item:hover { border-color:var(--accent); }
-.deck-item strong { flex:1; }
+body {
+	margin: 0;
+	/* 16px: sotto questa soglia il testo su mobile non è leggibile */
+	font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+	background: var(--bg);
+	color: var(--fg);
+	-webkit-text-size-adjust: 100%;
+}
 
-/* --- pagina mazzo --- */
-.split { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); height:100vh; }
-@media (max-width:800px) { .split { grid-template-columns:1fr; height:auto; } }
-.pane { background:var(--bg); padding:1rem; overflow-y:auto; }
-.crumb { display:block; color:var(--dim); font-size:.8rem; text-decoration:none; margin-bottom:.5rem; }
-.crumb:hover { color:var(--fg); }
-#q { width:100%; }
-.hit { display:flex; gap:.6rem; align-items:center; width:100%; text-align:left; margin-top:.5rem;
-       padding:.4rem; border:1px solid var(--line); border-radius:8px; background:var(--card);
-       color:var(--fg); cursor:pointer; font:inherit; }
-.hit:hover { border-color:var(--accent); }
-.hit img { width:44px; border-radius:4px; }
-.hit small { color:var(--dim); }
-.hit span:first-of-type { flex:1; }
-.row { display:flex; gap:.6rem; align-items:center; padding:.25rem .2rem; }
-.row:hover { background:var(--card); }
-.row.done .name { text-decoration:line-through; color:var(--dim); }
-.name { flex:1; }
-.del { border:0; background:none; color:var(--dim); cursor:pointer; font-size:1.1rem; padding:0 .3rem; }
-.del:hover { color:#ff6b6b; }
-#count { float:right; text-transform:none; letter-spacing:0; }
-#total { color:var(--dim); font-size:.85rem; margin:-.4rem 0 .5rem; }
-#refresh { border:1px solid var(--line); background:var(--card); color:var(--dim); border-radius:6px;
-           font:inherit; font-size:.7rem; padding:.15rem .4rem; cursor:pointer; }
-#refresh:hover:not(:disabled) { color:var(--fg); border-color:var(--accent); }
-#refresh:disabled { opacity:.4; cursor:wait; }
+a { color: inherit; }
 
-/* --- import / export --- */
-#import-box { margin-bottom:1.5rem; }
-#import-box summary { color:var(--dim); cursor:pointer; font-size:.85rem; }
-#import-box summary:hover { color:var(--fg); }
-#import { display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem; }
-#import textarea { padding:.6rem .8rem; border:1px solid var(--line); border-radius:8px;
-                   background:var(--card); color:var(--fg); font:13px/1.5 ui-monospace,monospace; resize:vertical; }
-#import button { align-self:flex-start; padding:.5rem 1rem; border:0; border-radius:8px;
-                 background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
-#import button:disabled { opacity:.5; cursor:wait; }
-#import-status:empty { display:none; }
-#export { border:1px solid var(--line); background:var(--card); color:var(--dim); border-radius:6px;
-          font:inherit; font-size:.7rem; padding:.15rem .4rem; cursor:pointer; }
-#export:hover { color:var(--fg); border-color:var(--accent); }
+/* Un solo anello di focus per tutta l'app: senza questo la tastiera naviga alla cieca. */
+:focus-visible {
+	outline: 2px solid var(--accent-soft);
+	outline-offset: 2px;
+	border-radius: 6px;
+}
 
-/* --- miniatura + anteprima --- */
-.row .thumb { width:26px; height:36px; object-fit:cover; object-position:top; border-radius:2px; flex:none; }
-.zoom { cursor:zoom-in; }
-.name.zoom:hover { color:var(--accent); }
-#preview { position:fixed; bottom:1rem; left:1rem; width:min(260px, 30vw); border-radius:12px;
-           box-shadow:0 8px 32px #000a; cursor:zoom-out; z-index:10; }
-#preview[hidden] { display:none; }
-@media (max-width:800px) { #preview { width:200px; } }
+/* Visibile solo agli screen reader: le etichette dei campi che il placeholder
+   da solo non sostituisce. */
+.sr-only {
+	position: absolute;
+	width: 1px; height: 1px;
+	padding: 0; margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
 
-/* --- simboli di mana --- */
-.sym { height:.9em; width:.9em; vertical-align:-.08em; }
-.mana { display:flex; gap:1px; }
+input, textarea, button, select { font: inherit; }
 
-/* riga mazzo: link e cestino separati (prima era tutto dentro un <a>) */
-.deck-item > a { flex:1; text-decoration:none; }
+input[type="text"], input:not([type]), textarea {
+	padding: .65rem .8rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--fg);
+	transition: border-color .18s ease;
+}
 
-/* fermare il server: installato non c'è una console da chiudere */
+input:not([type]):hover, textarea:hover { border-color: var(--line); }
+input:not([type]):focus, textarea:focus { border-color: var(--accent-soft); }
+::placeholder { color: var(--dim); opacity: 1; }
+
+code {
+	font: .875em/1 ui-monospace, "SF Mono", Menlo, monospace;
+	background: var(--surface-2);
+	padding: .15em .4em;
+	border-radius: 4px;
+}
+
+.note { color: var(--dim); font-size: .9375rem; margin: .5rem 0; }
+.note.error, .error { color: var(--err); }
+.hint { color: var(--dim); font-size: .8125rem; margin: .5rem 0 0; }
+
+.empty-state {
+	border: 1px dashed var(--line);
+	border-radius: var(--radius);
+	padding: 1.5rem;
+	color: var(--dim);
+	text-align: center;
+}
+.empty-state strong { display: block; color: var(--fg); margin-bottom: .25rem; }
+
+.cost { color: var(--dim); font-size: .875rem; white-space: nowrap; }
+/* Le cifre incolonnate: senza tabular-nums i prezzi ballano riga per riga. */
+.price { min-width: 5rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* --- pulsanti --------------------------------------------------------- */
+
+.btn-primary {
+	padding: .65rem 1.1rem;
+	border: 0;
+	border-radius: var(--radius);
+	background: var(--accent);
+	color: #fff;
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color .18s ease;
+}
+.btn-primary:hover:not(:disabled) { background: #7d5dff; }
+.btn-primary:disabled { opacity: .55; cursor: wait; }
+
+.btn-ghost {
+	display: inline-flex;
+	align-items: center;
+	gap: .35rem;
+	padding: .4rem .7rem;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--dim);
+	font-size: .875rem;
+	text-decoration: none;
+	cursor: pointer;
+	transition: color .18s ease, border-color .18s ease, background-color .18s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+	color: var(--fg);
+	border-color: var(--accent-soft);
+	background: var(--surface-2);
+}
+.btn-ghost:disabled { opacity: .5; cursor: wait; }
+
+.icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px; height: 32px;
+	flex: none;
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--dim);
+	cursor: pointer;
+	transition: color .18s ease, background-color .18s ease;
+}
+.icon-btn:hover { background: var(--surface-2); }
+.icon-btn.danger:hover { color: var(--err); }
+
+.icon { width: 1.125em; height: 1.125em; flex: none; }
+
+/* --- identità di colore ----------------------------------------------- */
+
+.pips { display: inline-flex; gap: 3px; align-items: center; vertical-align: middle; }
+.pip {
+	display: inline-block;
+	width: 11px; height: 11px;
+	border-radius: 50%;
+	/* il bordo scuro stacca i pallini chiari dal fondo chiaro di una card */
+	box-shadow: inset 0 0 0 1px #0007;
+}
+.pip-W { background: var(--mana-w); }
+.pip-U { background: var(--mana-u); }
+.pip-B { background: var(--mana-b); }
+.pip-R { background: var(--mana-r); }
+.pip-G { background: var(--mana-g); }
+
+.progress {
+	display: block;
+	height: 6px;
+	border-radius: 99px;
+	background: var(--surface-2);
+	overflow: hidden;
+}
+.progress > span {
+	display: block;
+	height: 100%;
+	border-radius: 99px;
+	background: linear-gradient(90deg, var(--accent), var(--accent-soft));
+	transition: width .3s ease;
+}
+
+/* --- home -------------------------------------------------------------- */
+
+.home { max-width: 760px; margin: 0 auto; padding: 3rem var(--pad) 4rem; }
+.home-head { margin-bottom: 2rem; }
+.home h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.01em; }
+.home .sub { color: var(--dim); margin: 0; max-width: 55ch; }
+
+.new-deck { display: flex; gap: .5rem; margin-bottom: 1rem; }
+.new-deck input { flex: 1; min-width: 0; }
+
+#import-box { margin-bottom: 2rem; }
+#import-box summary {
+	display: inline-flex;
+	align-items: center;
+	color: var(--dim);
+	cursor: pointer;
+	font-size: .9375rem;
+	padding: .4rem 0;
+}
+#import-box summary:hover { color: var(--fg); }
+#import { display: flex; flex-direction: column; gap: .6rem; margin-top: .75rem; }
+#import textarea { font: 14px/1.6 ui-monospace, "SF Mono", Menlo, monospace; resize: vertical; }
+#import .btn-primary { align-self: flex-start; }
+
+/* Vuoto e a riposo non occupa spazio, ma durante l'import deve dire qualcosa. */
+#import-status:empty:not(.htmx-request) { display: none; }
+#import-status.htmx-request::before { content: "Risolvo le carte su Scryfall, può volerci qualche secondo…"; }
+
+.deck-item {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: .9rem 1rem;
+	margin-bottom: .6rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	transition: border-color .18s ease, background-color .18s ease;
+}
+.deck-item:hover { border-color: var(--accent-soft); background: var(--surface-2); }
+
+.deck-link {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: .35rem;
+	text-decoration: none;
+}
+.deck-title { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.deck-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-link .deck-meta { color: var(--dim); font-size: .8125rem; }
+.deck-link .progress { max-width: 220px; }
+
+.deck-price {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: .15rem;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.deck-price small { color: var(--dim); font-size: .75rem; }
+
+/* --- pagina mazzo ------------------------------------------------------ */
+
+.deck-page {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) clamp(290px, 26vw, 370px);
+	gap: 1px;
+	background: var(--line-soft);
+	max-width: 1400px;
+	margin-inline: auto;
+	/* dvh e non vh: su mobile la barra del browser mangia il 100vh */
+	height: 100dvh;
+}
+#checklist, .finder { background: var(--bg); overflow-y: auto; min-width: 0; }
+.finder { padding: 1rem var(--pad) 3rem; }
+
+/* L'intestazione resta attaccata mentre scorri 100 carte. */
+.deck-bar {
+	position: sticky;
+	top: 0;
+	z-index: var(--z-bar);
+	display: grid;
+	grid-template-areas: "crumb crumb" "title actions" "counts actions";
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: .3rem .75rem;
+	padding: .9rem var(--pad);
+	background: var(--bg);
+	border-bottom: 1px solid var(--line);
+}
+.crumb {
+	grid-area: crumb;
+	display: inline-flex;
+	align-items: center;
+	gap: .3rem;
+	width: fit-content;
+	color: var(--dim);
+	font-size: .8125rem;
+	text-decoration: none;
+	padding: .25rem 0;
+}
+.crumb:hover { color: var(--fg); }
+.deck-id { grid-area: title; display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.deck-id h1 {
+	font-size: 1.375rem;
+	line-height: 1.2;
+	margin: 0;
+	letter-spacing: -.01em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.deck-counts { grid-area: counts; margin: 0; color: var(--dim); font-size: .875rem; }
+.deck-counts strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+.deck-counts .sep { opacity: .5; padding: 0 .2rem; }
+.deck-actions { grid-area: actions; display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+
+/* --- statistiche ------------------------------------------------------- */
+
+.deck-stats {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	gap: 1rem 1.5rem;
+	align-items: end;
+	max-width: 960px;
+	padding: 1.25rem var(--pad);
+	border-bottom: 1px solid var(--line-soft);
+}
+.figures {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+	gap: .75rem 1.25rem;
+	margin: 0;
+}
+.figure { margin: 0; min-width: 0; }
+.figure.wide { grid-column: 1 / -1; }
+.figure dt { color: var(--dim); font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+.figure dd {
+	margin: .2rem 0 0;
+	font-size: 1.0625rem;
+	font-variant-numeric: tabular-nums;
+}
+.figure.wide dd { display: flex; align-items: center; gap: .6rem; }
+.figure.wide .progress { flex: 1; max-width: 260px; }
+
+.curve-box, .colors-box { margin: 0; }
+.curve-box figcaption, .colors-box figcaption {
+	color: var(--dim);
+	font-size: .75rem;
+	text-transform: uppercase;
+	letter-spacing: .06em;
+	margin-bottom: .5rem;
+}
+.curve-box figcaption small { text-transform: none; letter-spacing: 0; opacity: .8; }
+
+.curve { display: flex; align-items: flex-end; gap: .3rem; height: 92px; }
+.curve-col {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: .2rem;
+	height: 100%;
+	width: 26px;
+}
+.curve-n { font-size: .75rem; color: var(--dim); font-variant-numeric: tabular-nums; min-height: 1.1em; }
+.curve-track {
+	flex: 1;
+	width: 100%;
+	display: flex;
+	align-items: flex-end;
+	background: var(--surface);
+	border-radius: 4px 4px 0 0;
+}
+.curve-bar {
+	width: 100%;
+	min-height: 2px;
+	border-radius: 4px 4px 0 0;
+	background: linear-gradient(180deg, var(--accent-soft), var(--accent));
+}
+.curve-x { font-size: .75rem; color: var(--dim); }
+
+.colors { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.colors li { display: flex; align-items: center; gap: .45rem; font-size: .8125rem; color: var(--dim); white-space: nowrap; }
+.colors b { color: var(--fg); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* --- righe della checklist --------------------------------------------- */
+
+#deck { max-width: 960px; padding: 0 var(--pad) 4rem; }
+
+h3 {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+	margin: 1.75rem 0 .5rem;
+	font-size: .8125rem;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+	color: var(--dim);
+	border-bottom: 1px solid var(--line-soft);
+	padding-bottom: .4rem;
+}
+h3 span { font-variant-numeric: tabular-nums; }
+
+.row {
+	display: flex;
+	gap: .65rem;
+	align-items: center;
+	min-height: 44px;
+	padding: .2rem .45rem;
+	border-radius: 8px;
+	transition: background-color .15s ease;
+}
+.row:hover { background: var(--surface); }
+.row.done .name { text-decoration: line-through; color: var(--dim); }
+.row.done .thumb { opacity: .5; }
+
+/* 44×44 di area cliccabile attorno a una casella che ne misura 20. */
+.check-box {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 34px; height: 34px;
+	flex: none;
+	cursor: pointer;
+	border-radius: 8px;
+}
+.check-box:hover { background: var(--surface-2); }
+.check { width: 19px; height: 19px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+.thumb { width: 28px; height: 39px; object-fit: cover; object-position: top; border-radius: 3px; flex: none; }
+span.thumb { background: var(--surface-2); }
+
+.name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name .qty { color: var(--dim); font-variant-numeric: tabular-nums; }
+.foil { color: var(--mana-w); }
+
+.zoom { cursor: zoom-in; }
+.name.zoom:hover { color: var(--accent-soft); }
+
+.mana { display: flex; gap: 1px; flex: none; }
+.sym { height: .95em; width: .95em; vertical-align: -.08em; }
+
+/* --- pannello di ricerca ------------------------------------------------ */
+
+.finder h2 {
+	display: flex;
+	align-items: center;
+	gap: .4rem;
+	margin: 0 0 .75rem;
+	font-size: .8125rem;
+	letter-spacing: .08em;
+	text-transform: uppercase;
+	color: var(--dim);
+}
+#q { width: 100%; }
+
+.hit {
+	display: flex;
+	gap: .6rem;
+	align-items: center;
+	width: 100%;
+	text-align: left;
+	margin-top: .5rem;
+	padding: .45rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--fg);
+	cursor: pointer;
+	transition: border-color .18s ease, background-color .18s ease;
+}
+.hit:hover { border-color: var(--accent-soft); background: var(--surface-2); }
+.hit img { width: 44px; border-radius: 4px; flex: none; }
+.hit-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.hit-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hit-text small { color: var(--dim); font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* htmx aggiunge .htmx-request all'elemento indicato da hx-indicator. L'opacity
+   è esplicita: htmx ne inietta una sua e non voglio dipendere da quale vince. */
+.htmx-indicator { display: none; opacity: 0; }
+.htmx-indicator.htmx-request, .htmx-request .htmx-indicator { display: block; opacity: 1; }
+
+/* --- anteprima carta ---------------------------------------------------- */
+
+#preview {
+	position: fixed;
+	right: 1rem;
+	bottom: 1rem;
+	width: min(280px, 32vw);
+	border-radius: 14px;
+	box-shadow: 0 12px 40px #000c, 0 0 0 1px var(--line);
+	cursor: zoom-out;
+	z-index: var(--z-preview);
+}
+#preview[hidden] { display: none; }
+
+/* --- responsive --------------------------------------------------------- */
+
+.only-narrow { display: none; }
+
+@media (max-width: 900px) {
+	.deck-page { grid-template-columns: 1fr; height: auto; gap: 0; }
+	/* la checklist è già prima nel DOM: su mobile si legge per prima */
+	#checklist, .finder { overflow: visible; height: auto; }
+	.finder { border-top: 1px solid var(--line); padding-top: 1.25rem; }
+	.deck-stats { grid-template-columns: 1fr; align-items: start; }
+	.only-narrow { display: inline-flex; }
+	#preview { width: 190px; }
+}
+
+@media (max-width: 560px) {
+	:root { --pad: 1rem; }
+	.deck-bar { grid-template-areas: "crumb" "title" "counts" "actions"; grid-template-columns: 1fr; }
+	.deck-actions { justify-content: flex-start; }
+	.home { padding-top: 2rem; }
+	.home h1 { font-size: 1.5rem; }
+	.deck-item { flex-wrap: wrap; }
+	.deck-link { flex: 1 1 100%; }
+	.deck-price { flex-direction: row; align-items: baseline; gap: .5rem; }
+	.new-deck { flex-wrap: wrap; }
+	.new-deck .btn-primary { flex: 1; }
+}
+
+/* Su touch i bersagli scendono sotto i 44px consigliati: qui li allargo. */
+@media (pointer: coarse) {
+	.icon-btn { width: 44px; height: 44px; }
+	.check-box { width: 44px; height: 44px; }
+	.check { width: 22px; height: 22px; }
+	.row { min-height: 48px; }
+	.btn-ghost { padding: .55rem .8rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

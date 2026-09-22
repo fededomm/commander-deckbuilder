@@ -15,6 +15,7 @@ type Deck struct {
 	Purchased int     // somma delle qty già acquistate
 	Total     float64 // valore del mazzo
 	Todo      float64 // quanto resta da comprare
+	Colors    string  // colori dei costi di mana, in ordine WUBRG, es. "WUB"
 }
 
 type Card struct {
@@ -114,7 +115,8 @@ func listDecks(db *sql.DB) ([]Deck, error) {
 		       COALESCE(SUM(c.qty), 0),
 		       COALESCE(SUM(c.qty * c.purchased), 0),
 		       COALESCE(SUM(c.qty * c.price_eur), 0),
-		       COALESCE(SUM(c.qty * c.price_eur * (1 - c.purchased)), 0)
+		       COALESCE(SUM(c.qty * c.price_eur * (1 - c.purchased)), 0),
+		       COALESCE(GROUP_CONCAT(c.mana_cost, ''), '')
 		FROM decks d LEFT JOIN cards c ON c.deck_id = d.id
 		GROUP BY d.id ORDER BY d.created DESC`)
 	if err != nil {
@@ -124,9 +126,11 @@ func listDecks(db *sql.DB) ([]Deck, error) {
 	var out []Deck
 	for rows.Next() {
 		var d Deck
-		if err := rows.Scan(&d.ID, &d.Name, &d.Cards, &d.Purchased, &d.Total, &d.Todo); err != nil {
+		var costs string // i costi di tutte le carte, concatenati: li riduco a WUBRG
+		if err := rows.Scan(&d.ID, &d.Name, &d.Cards, &d.Purchased, &d.Total, &d.Todo, &costs); err != nil {
 			return nil, err
 		}
+		d.Colors = manaColors(costs)
 		out = append(out, d)
 	}
 	return out, rows.Err()

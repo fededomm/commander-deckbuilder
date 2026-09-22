@@ -322,3 +322,103 @@ func del(t *testing.T, url string) {
 		t.Fatalf("DELETE %s -> %d", url, res.StatusCode)
 	}
 }
+
+func TestManaValue(t *testing.T) {
+	for _, c := range []struct {
+		cost string
+		want int
+	}{
+		{"", 0},
+		{"{0}", 0},
+		{"{3}", 3},
+		{"{2}{U}{R}", 4},
+		{"{W}{W}", 2},
+		{"{X}{R}", 1},     // X vale 0
+		{"{2/U}{2/U}", 4}, // ibrido monocolore: conta la metà generica
+		{"{W/U}{W/U}", 2}, // ibrido fra colori: vale 1 a simbolo
+		{"{U/P}", 1},      // phyrexiano
+		{"{10}{G}", 11},   // generico a due cifre
+		{"{C}", 1},        // incolore
+		{"{2}{U", 2},      // graffa non chiusa: mi fermo, non impazzisco
+	} {
+		if got := manaValue(c.cost); got != c.want {
+			t.Errorf("manaValue(%q) = %d, voglio %d", c.cost, got, c.want)
+		}
+	}
+}
+
+func TestManaColors(t *testing.T) {
+	for _, c := range []struct{ cost, want string }{
+		{"", ""},
+		{"{3}", ""},
+		{"{R}{G}{W}", "WRG"}, // riordinato in WUBRG, non nell'ordine del costo
+		{"{U}{U}{U}", "U"},   // niente doppioni
+		{"{W/U}{B}", "WUB"},  // l'ibrido porta entrambi i colori
+		{"{2/R}", "R"},
+	} {
+		if got := manaColors(c.cost); got != c.want {
+			t.Errorf("manaColors(%q) = %q, voglio %q", c.cost, got, c.want)
+		}
+	}
+}
+
+func TestManaCurveEscludeLeTerre(t *testing.T) {
+	cards := []Card{
+		{TypeLine: "Basic Land — Island", ManaCost: "", Qty: 10},
+		{TypeLine: "Creature — Human", ManaCost: "{1}{U}", Qty: 1},
+		{TypeLine: "Creature — Human", ManaCost: "{1}{U}", Qty: 3}, // la qty conta
+		{TypeLine: "Sorcery", ManaCost: "{9}{U}", Qty: 1},          // oltre il 7 finisce in coda
+	}
+	bars := manaCurve(cards)
+	if len(bars) != curveTop+1 {
+		t.Fatalf("voglio %d colonne, ho %d", curveTop+1, len(bars))
+	}
+	if bars[0].Qty != 0 {
+		t.Errorf("colonna 0 = %d, le terre non devono entrarci", bars[0].Qty)
+	}
+	if bars[2].Qty != 4 {
+		t.Errorf("colonna 2 = %d, voglio 4", bars[2].Qty)
+	}
+	if bars[curveTop].Label != "7+" || bars[curveTop].Qty != 1 {
+		t.Errorf("ultima colonna = %q/%d, voglio \"7+\"/1", bars[curveTop].Label, bars[curveTop].Qty)
+	}
+	if bars[2].Pct != 100 {
+		t.Errorf("la colonna più alta deve stare al 100%%, sta al %d", bars[2].Pct)
+	}
+	// Un mazzo di sole terre non ha curva da disegnare.
+	if manaCurve(cards[:1]) != nil {
+		t.Error("solo terre: voglio nil, così il template salta il grafico")
+	}
+}
+
+func TestColorStatsEDeckColors(t *testing.T) {
+	cards := []Card{
+		{ManaCost: "{1}{U}", Qty: 2},
+		{ManaCost: "{W}{U}", Qty: 1}, // multicolore: conta sia in W sia in U
+		{ManaCost: "{2}", Qty: 5},    // incolore: non conta da nessuna parte
+	}
+	stats := colorStats(cards)
+	if len(stats) != 2 {
+		t.Fatalf("voglio 2 colori, ho %+v", stats)
+	}
+	if stats[0].Code != "W" || stats[0].Qty != 1 {
+		t.Errorf("primo colore = %+v, voglio W/1", stats[0])
+	}
+	if stats[1].Code != "U" || stats[1].Qty != 3 {
+		t.Errorf("secondo colore = %+v, voglio U/3", stats[1])
+	}
+	if got := deckColors(cards); got != "WU" {
+		t.Errorf("deckColors = %q, voglio \"WU\"", got)
+	}
+}
+
+func TestPctNonDividePerZero(t *testing.T) {
+	for _, c := range []struct{ part, total, want int }{
+		{0, 0, 0}, {0, 10, 0}, {5, 10, 50}, {10, 10, 100}, {99, 100, 99},
+		{11, 10, 100}, // qty incoerenti non devono sfondare la barra
+	} {
+		if got := pct(c.part, c.total); got != c.want {
+			t.Errorf("pct(%d, %d) = %d, voglio %d", c.part, c.total, got, c.want)
+		}
+	}
+}

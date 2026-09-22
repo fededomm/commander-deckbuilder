@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/a-h/templ"
 	"strconv"
 	"strings"
 )
@@ -182,3 +183,172 @@ func scryVals(id string) string {
 	b, _ := json.Marshal(map[string]string{"scryfall_id": id})
 	return string(b)
 }
+
+// --- Statistiche del mazzo: curva di mana, colori, avanzamento acquisti ---
+
+// manaTokens estrae i simboli di un costo: "{2}{U}" -> ["2","U"]. Il testo fuori
+// dalle graffe non è un simbolo e viene ignorato.
+//
+// ponytail: scansione a parte invece di riusare manaParts, che interleava i
+// simboli col testo libero e costringerebbe a indovinare quale pezzo è cosa.
+func manaTokens(cost string) []string {
+	var out []string
+	for {
+		open := strings.IndexByte(cost, '{')
+		if open < 0 {
+			return out
+		}
+		shut := strings.IndexByte(cost[open:], '}')
+		if shut < 0 {
+			return out
+		}
+		shut += open
+		out = append(out, cost[open+1:shut])
+		cost = cost[shut+1:]
+	}
+}
+
+// manaValue è il costo convertito: i generici sommano il loro numero, ogni altro
+// simbolo vale 1, {X} vale 0 — le stesse regole di Scryfall. Negli ibridi conta
+// la metà più cara, quindi "{2/U}" vale 2 e "{W/U}" vale 1.
+func manaValue(cost string) int {
+	v := 0
+	for _, t := range manaTokens(cost) {
+		half, _, _ := strings.Cut(t, "/")
+		if n, err := strconv.Atoi(half); err == nil {
+			v += n
+			continue
+		}
+		if half == "X" || half == "Y" || half == "Z" {
+			continue
+		}
+		v++
+	}
+	return v
+}
+
+// manaColors ritorna i colori presenti in un costo, sempre nell'ordine WUBRG.
+func manaColors(cost string) string {
+	toks := manaTokens(cost)
+	var out strings.Builder
+	for _, c := range "WUBRG" {
+		for _, t := range toks {
+			if strings.ContainsRune(t, c) {
+				out.WriteRune(c)
+				break
+			}
+		}
+	}
+	return out.String()
+}
+
+// deckColors sono i colori che compaiono nei costi di mana del mazzo. Non è la
+// color identity di Scryfall, che guarda anche il testo delle carte: per i
+// pallini in elenco la differenza non si vede, per una regola di formato sì.
+// I costi sono autodelimitati dalle graffe, quindi concatenarli è lecito.
+func deckColors(cards []Card) string {
+	var all strings.Builder
+	for _, c := range cards {
+		all.WriteString(c.ManaCost)
+	}
+	return manaColors(all.String())
+}
+
+var colorNames = map[rune]string{'W': "Bianco", 'U': "Blu", 'B': "Nero", 'R': "Rosso", 'G': "Verde"}
+
+// colorName serve alle etichette: "WU" -> "Bianco, Blu".
+func colorName(code string) string {
+	var names []string
+	for _, r := range code {
+		if n, ok := colorNames[r]; ok {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return "Incolore"
+	}
+	return strings.Join(names, ", ")
+}
+
+type ColorStat struct {
+	Code string // "W", "U", …
+	Name string // "Bianco", "Blu", …
+	Qty  int
+}
+
+// colorStats conta le carte per colore; una multicolore conta in ogni suo colore,
+// quindi la somma può superare il numero di carte.
+func colorStats(cards []Card) []ColorStat {
+	counts := map[rune]int{}
+	for _, c := range cards {
+		for _, r := range manaColors(c.ManaCost) {
+			counts[r] += max(c.Qty, 1)
+		}
+	}
+	var out []ColorStat
+	for _, r := range "WUBRG" {
+		if counts[r] > 0 {
+			out = append(out, ColorStat{Code: string(r), Name: colorNames[r], Qty: counts[r]})
+		}
+	}
+	return out
+}
+
+type CurveBar struct {
+	Label string // "0", "1", … "7+"
+	Qty   int
+	Pct   int // altezza relativa alla colonna più alta, 0-100
+}
+
+const curveTop = 7 // tutto da 7 in su finisce nell'ultima colonna
+
+// manaCurve esclude le terre: non hanno costo e schiaccerebbero la curva sullo 0.
+// Nil se non c'è niente da disegnare, così il template salta il blocco.
+func manaCurve(cards []Card) []CurveBar {
+	counts := make([]int, curveTop+1)
+	for _, c := range cards {
+		if categorize(c.TypeLine) == "Land" {
+			continue
+		}
+		counts[min(manaValue(c.ManaCost), curveTop)] += max(c.Qty, 1)
+	}
+	peak := 0
+	for _, n := range counts {
+		peak = max(peak, n)
+	}
+	if peak == 0 {
+		return nil
+	}
+	out := make([]CurveBar, 0, len(counts))
+	for i, n := range counts {
+		label := itoa(i)
+		if i == curveTop {
+			label = itoa(curveTop) + "+"
+		}
+		out = append(out, CurveBar{Label: label, Qty: n, Pct: n * 100 / peak})
+	}
+	return out
+}
+
+// curveLabel: la descrizione testuale del grafico per chi usa uno screen reader.
+func curveLabel(bars []CurveBar) string {
+	parts := make([]string, 0, len(bars))
+	for _, b := range bars {
+		parts = append(parts, "costo "+b.Label+": "+itoa(b.Qty))
+	}
+	return "Curva di mana — " + strings.Join(parts, ", ")
+}
+
+// pct arrotonda per difetto e non divide per zero: serve alle barre di avanzamento.
+func pct(part, total int) int {
+	if total <= 0 {
+		return 0
+	}
+	return min(part*100/total, 100)
+}
+
+// Le percentuali qui sotto nascono da interi calcolati dal server, mai da input
+// dell'utente: SafeCSS è una constatazione, non una scorciatoia.
+func barHeight(p int) templ.SafeCSS { return templ.SafeCSS("height:" + itoa(p) + "%") }
+
+func barWidth(p int) templ.SafeCSS { return templ.SafeCSS("width:" + itoa(p) + "%") }
