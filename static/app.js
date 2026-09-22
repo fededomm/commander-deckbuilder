@@ -20,6 +20,21 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape" && preview) preview.hidden = true;
 });
 
+// La <dialog> delle ristampe si apre solo da JS: showModal() è quello che porta
+// backdrop, Esc e focus trap. Chiuderla invece è nativo (form method="dialog").
+addEventListener("htmx:afterSwap", (e) => {
+  if (e.target.id === "prints" && !e.target.open) e.target.showModal();
+});
+
+// Scelta una ristampa la dialog ha finito il suo lavoro: la chiudo. Solo sulle
+// POST, altrimenti il cambio pagina — che è una GET dentro la dialog — la chiuderebbe.
+addEventListener("htmx:afterRequest", (e) => {
+  const dialog = e.target.closest?.("dialog");
+  if (dialog?.open && e.detail.successful && e.detail.requestConfig.verb === "post") {
+    dialog.close();
+  }
+});
+
 // Connessione che resta aperta finché la pagina è aperta: quando chiudi la
 // finestra cade e il server si ferma da solo. Fra una pagina e l'altra si
 // riapre da sé, e il server aspetta qualche secondo prima di arrendersi.

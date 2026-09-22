@@ -82,16 +82,30 @@ func resolvePrintings(ctx context.Context, lines []MoxfieldLine) (rows []Card, m
 	if err != nil {
 		return nil, nil, err
 	}
+	rows, missing = matchPrintings(lines, found)
+	return rows, missing, nil
+}
 
+// matchPrintings accoppia le righe alle stampe che Scryfall ha restituito.
+// La stampa scritta nella lista fa fede: una riga con "(EOC) 57" o prende
+// quella stampa o finisce fra le mancanti. Ripiegare sul nome darebbe una
+// ristampa a caso — con l'espansione sbagliata e il prezzo di un'altra carta.
+// Il nome vale solo per le righe che la stampa non ce l'avevano proprio.
+func matchPrintings(lines []MoxfieldLine, found []scryCard) (rows []Card, missing []MoxfieldLine) {
 	bySet := map[string]scryCard{}
 	byName := map[string]scryCard{}
 	for _, c := range found {
 		bySet[c.Set+"|"+c.CollectorNumber] = c
-		byName[strings.ToLower(c.Name)] = c
+		if _, seen := byName[strings.ToLower(c.Name)]; !seen {
+			byName[strings.ToLower(c.Name)] = c
+		}
 	}
 	for _, l := range lines {
-		c, ok := bySet[l.SetCode+"|"+l.CollectorNumber]
-		if !ok {
+		var c scryCard
+		var ok bool
+		if l.SetCode != "" {
+			c, ok = bySet[l.SetCode+"|"+l.CollectorNumber]
+		} else {
 			// Moxfield scrive "A / B" le bifacciali, Scryfall "A // B"
 			c, ok = byName[strings.ToLower(strings.ReplaceAll(l.Name, " / ", " // "))]
 		}
@@ -101,5 +115,5 @@ func resolvePrintings(ctx context.Context, lines []MoxfieldLine) (rows []Card, m
 		}
 		rows = append(rows, c.toCard(l.Qty, l.Foil))
 	}
-	return rows, missing, nil
+	return rows, missing
 }

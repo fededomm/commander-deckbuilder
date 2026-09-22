@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/a-h/templ"
+	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/a-h/templ"
 )
 
 // Ordine di priorità: il primo tipo che matcha vince (Land prima di Creature
@@ -352,3 +354,63 @@ func pct(part, total int) int {
 func barHeight(p int) templ.SafeCSS { return templ.SafeCSS("height:" + itoa(p) + "%") }
 
 func barWidth(p int) templ.SafeCSS { return templ.SafeCSS("width:" + itoa(p) + "%") }
+
+// --- Stampe (ristampe) --------------------------------------------------
+
+// printYear: da "2024-08-02" a "2024". Scryfall manda sempre la data intera,
+// ma se un giorno mancasse non voglio un panic per quattro caratteri.
+func printYear(released string) string {
+	if len(released) < 4 {
+		return ""
+	}
+	return released[:4]
+}
+
+// printsURL è la rotta che elenca le ristampe di una carta. oracle_id identifica
+// la carta al di là della stampa; sulle "reversible" manca e ripiego sul nome.
+func printsURL(deckID int64, c scryCard) string {
+	v := url.Values{}
+	if c.OracleID != "" {
+		v.Set("oracle", c.OracleID)
+	} else {
+		v.Set("name", c.Name)
+	}
+	return "/deck/" + itoa64(deckID) + "/prints?" + v.Encode()
+}
+
+// Page è una fetta di ristampe con il suo posto nella sequenza: la griglia
+// della dialog ne mostra una per volta.
+type Page struct {
+	Items []scryCard
+	Num   int // pagina corrente, da 1
+	Count int // pagine totali
+	Total int // ristampe in tutto
+}
+
+const perPage = 12 // 12 rientra nella dialog senza scroll fino a 3 colonne
+
+// paginate taglia la pagina chiesta. Una pagina fuori range non è un errore:
+// il link può essere vecchio, meglio la prima (o l'ultima) che una schermata rotta.
+func paginate(cards []scryCard, num int) Page {
+	p := Page{Total: len(cards), Num: num, Count: (len(cards) + perPage - 1) / perPage}
+	if p.Count == 0 {
+		return Page{Num: 1, Count: 1}
+	}
+	p.Num = min(max(num, 1), p.Count)
+	start := (p.Num - 1) * perPage
+	p.Items = cards[start:min(start+perPage, len(cards))]
+	return p
+}
+
+// pageURL riusa la query della richiesta cambiando solo la pagina: così la
+// dialog non deve sapere se la carta è stata trovata per oracle o per nome.
+func pageURL(base url.Values, deckID int64, num int) string {
+	v := url.Values{}
+	for k, vals := range base {
+		if k != "page" {
+			v[k] = vals
+		}
+	}
+	v.Set("page", itoa(num))
+	return "/deck/" + itoa64(deckID) + "/prints?" + v.Encode()
+}

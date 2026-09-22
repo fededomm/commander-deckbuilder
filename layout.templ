@@ -16,8 +16,28 @@ templ layout(title string) {
 		</head>
 		<body>
 			{ children... }
+			@legal()
 		</body>
 	</html>
+}
+
+// legal: la dicitura richiesta dalla Fan Content Policy di Wizards, più
+// l'attribuzione a Scryfall da cui arrivano dati, immagini e prezzi.
+// Il testo Wizards è quello ufficiale: va lasciato in inglese e alla lettera.
+templ legal() {
+	<footer class="legal">
+		<p>
+			commander-deckbuilder is unofficial Fan Content permitted under the
+			<a href="https://company.wizards.com/en/legal/fancontentpolicy" target="_blank" rel="noopener noreferrer">Fan Content Policy</a>.
+			Not approved/endorsed by Wizards. Portions of the materials used are property of
+			Wizards of the Coast. ©Wizards of the Coast LLC.
+		</p>
+		<p>
+			Dati, immagini e simboli delle carte da
+			<a href="https://scryfall.com" target="_blank" rel="noopener noreferrer">Scryfall</a>;
+			prezzi Cardmarket forniti tramite Scryfall. Nessuno dei due approva o sponsorizza questa app.
+		</p>
+	</footer>
 }
 
 // pips: i pallini dell'identità di colore, es. "WUB". Vuoto se il mazzo è incolore,

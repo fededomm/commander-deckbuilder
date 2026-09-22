@@ -1,5 +1,10 @@
 package main
 
+import (
+	"net/url"
+	"strings"
+)
+
 templ deckPage(deck Deck, cards []Card) {
 	@layout("Mazzo · " + deck.Name) {
 		<div class="deck-page">
@@ -29,6 +34,9 @@ templ deckPage(deck Deck, cards []Card) {
 			</aside>
 		</div>
 		<img id="preview" alt="" hidden/>
+		// Una sola dialog per pagina, riempita da htmx. È l'elemento nativo:
+		// backdrop, Esc e focus trap li porta il browser.
+		<dialog id="prints" aria-labelledby="prints-title"></dialog>
 	}
 }
 
@@ -216,6 +224,12 @@ templ cardRow(c Card) {
 				<span class="foil" title="Foil" aria-label="foil">✦</span>
 			}
 		</span>
+		if c.SetCode != "" {
+			<span class="set" title="Espansione e numero di collezione">
+				{ strings.ToUpper(c.SetCode) }
+				<span class="set-num">{ c.CollectorNumber }</span>
+			</span>
+		}
 		<span class="cost mana">
 			@mana(c.ManaCost)
 		</span>
@@ -248,20 +262,122 @@ templ searchResults(deckID int64, cards []scryCard, err error) {
 		<p class="note">Nessuna carta trovata.</p>
 	} else {
 		for _, c := range cards {
-			<button
-				class="hit"
-				hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
-				hx-vals={ scryVals(c.ID) }
-				hx-target="#checklist"
-				hx-swap="outerHTML"
-			>
-				<img src={ c.image() } alt="" loading="lazy"/>
-				<span class="hit-text">
-					<strong>{ c.Name }</strong>
-					<small>{ c.TypeLine }</small>
-				</span>
-				<span class="cost price">{ price0(c.price(false)) }</span>
-			</button>
+			<div class="hit-box">
+				<button
+					class="hit"
+					hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
+					hx-vals={ scryVals(c.ID) }
+					hx-target="#checklist"
+					hx-swap="outerHTML"
+				>
+					<img src={ c.image() } alt="" loading="lazy"/>
+					<span class="hit-text">
+						<strong>{ c.Name }</strong>
+						<small>{ c.TypeLine }</small>
+					</span>
+					<span class="cost price">{ price0(c.price(false)) }</span>
+				</button>
+				<button
+					class="prints-btn"
+					hx-get={ printsURL(deckID, c) }
+					hx-target="#prints"
+					hx-swap="innerHTML"
+					hx-disabled-elt="this"
+				>
+					@iconLayers()
+					Altre stampe
+					<span class="set">
+						{ strings.ToUpper(c.Set) }
+						<span class="set-num">{ c.CollectorNumber }</span>
+					</span>
+				</button>
+			</div>
 		}
+	}
+}
+
+// printsDialog: intestazione, griglia di ristampe e paginazione. Il contenuto
+// della dialog, non la dialog stessa — quella sta già nella pagina.
+templ printsDialog(deckID int64, name string, p Page, query url.Values, err error) {
+	<header class="dialog-head">
+		<div>
+			<h2 id="prints-title">Stampe di { name }</h2>
+			if err == nil && p.Total > 0 {
+				<p class="note">{ itoa(p.Total) } ristampe, dalla più economica</p>
+			}
+		</div>
+		// form method="dialog": chiude senza una riga di JS
+		<form method="dialog">
+			<button class="icon-btn" aria-label="Chiudi le stampe">
+				@iconClose()
+			</button>
+		</form>
+	</header>
+	if err != nil {
+		<p class="note error">{ err.Error() }</p>
+	} else if p.Total == 0 {
+		<p class="note">Nessuna ristampa trovata.</p>
+	} else {
+		<div class="prints-grid">
+			for _, c := range p.Items {
+				@printCard(deckID, c)
+			}
+		</div>
+		@pager(deckID, p, query)
+	}
+}
+
+// printCard è una ristampa nella griglia: cliccarla mette nel mazzo quella
+// stampa lì — il server rilegge la carta dall'id, come per la ricerca.
+templ printCard(deckID int64, c scryCard) {
+	<button
+		class="print"
+		aria-label={ "Aggiungi " + c.Name + " — edizione " + c.SetName }
+		hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
+		hx-vals={ scryVals(c.ID) }
+		hx-target="#checklist"
+		hx-swap="outerHTML"
+	>
+		<img src={ thumbURL(c.image()) } alt="" loading="lazy"/>
+		<span class="print-set">
+			{ strings.ToUpper(c.Set) } { c.CollectorNumber }
+		</span>
+		<span class="print-name">{ c.SetName }</span>
+		<span class="print-foot">
+			<span>{ printYear(c.ReleasedAt) }</span>
+			<b class="price">{ price0(c.price(false)) }</b>
+		</span>
+	</button>
+}
+
+templ pager(deckID int64, p Page, query url.Values) {
+	if p.Count > 1 {
+		<nav class="pager" aria-label="Pagine delle ristampe">
+			<button
+				class="btn-ghost"
+				disabled?={ p.Num <= 1 }
+				aria-label="Pagina precedente"
+				hx-get={ pageURL(query, deckID, p.Num-1) }
+				hx-target="#prints"
+				hx-swap="innerHTML"
+			>
+				@iconBack()
+				Indietro
+			</button>
+			<span class="note" role="status" aria-live="polite">Pagina { itoa(p.Num) } di { itoa(p.Count) }</span>
+			<button
+				class="btn-ghost"
+				disabled?={ p.Num >= p.Count }
+				aria-label="Pagina successiva"
+				hx-get={ pageURL(query, deckID, p.Num+1) }
+				hx-target="#prints"
+				hx-swap="innerHTML"
+			>
+				Avanti
+				<span class="flip">
+					@iconBack()
+				</span>
+			</button>
+		</nav>
 	}
 }

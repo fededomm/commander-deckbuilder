@@ -1,10 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime/debug"
+	"slices"
 	"strconv"
 	"time"
 
@@ -12,8 +15,26 @@ import (
 )
 
 // Scryfall chiede uno User-Agent identificabile e ~100ms fra le richieste.
-// Dal browser lo faceva il browser, qui tocca a noi.
-const userAgent = "commander-deckbuilder/0.2 (https://github.com/local)"
+// Dal browser lo faceva il browser, qui tocca a noi. L'URL dev'essere vero:
+// è il recapito con cui Scryfall ci scrive invece di bannarci e basta.
+var userAgent = "commander-deckbuilder/" + buildVersion() +
+	" (+https://github.com/fededomm/commander-deckbuilder)"
+
+// buildVersion legge la revisione che il go tool incastona nel binario da sé
+// (-buildvcs, attivo di default). Un numero scritto a mano resta indietro alla
+// prima release e ci ritroviamo a dichiarare una versione che non esiste.
+func buildVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && len(s.Value) >= 7 {
+			return s.Value[:7]
+		}
+	}
+	return "dev" // go test e go run non sempre incastonano il VCS
+}
 
 var scryfall = resty.New().
 	SetBaseURL("https://api.scryfall.com").
@@ -38,10 +59,13 @@ func restErr(res *resty.Response) error {
 
 type scryCard struct {
 	ID              string            `json:"id"`
+	OracleID        string            `json:"oracle_id"`
 	Name            string            `json:"name"`
 	TypeLine        string            `json:"type_line"`
 	ManaCost        string            `json:"mana_cost"`
 	Set             string            `json:"set"`
+	SetName         string            `json:"set_name"`
+	ReleasedAt      string            `json:"released_at"`
 	CollectorNumber string            `json:"collector_number"`
 	ImageURIs       map[string]string `json:"image_uris"`
 	CardFaces       []struct {
@@ -102,11 +126,54 @@ func request(ctx context.Context, result any) *resty.Request {
 	return scryfall.R().SetContext(ctx).SetResult(result).SetError(&scryError{})
 }
 
-// scryfallSearch: 0 risultati non è un errore, Scryfall risponde 404 su "nessun match".
+// Quante carte mostrare: oltre non si scorre, si ricerca meglio.
+const maxResults = 30
+
+// scryfallSearch: una riga per carta, la stampa che Scryfall considera principale.
 func scryfallSearch(ctx context.Context, q string) ([]scryCard, error) {
+	cards, err := scryfallQuery(ctx, map[string]string{"unique": "cards", "q": q})
+	return cards[:min(len(cards), maxResults)], err
+}
+
+// scryfallPrints elenca tutte le ristampe di una carta. Le chiedo dalla più
+// recente e le riordino per prezzo: è una lista della spesa, e "order=eur" di
+// Scryfall mette in testa le non quotate, cioè proprio quelle che non si comprano.
+// Qui non taglio: la griglia le impagina tutte.
+func scryfallPrints(ctx context.Context, q string) ([]scryCard, error) {
+	cards, err := scryfallQuery(ctx, map[string]string{
+		"unique": "prints", "order": "released", "dir": "desc", "q": q})
+	if err != nil {
+		return nil, err
+	}
+	// ponytail: una pagina sola di Scryfall (175 stampe). Nessuna carta ne ha
+	// di più; se un giorno succedesse, qui si segue "next_page".
+	sortByPrice(cards)
+	return cards, nil
+}
+
+// sortByPrice: le quotate prima, dalla più economica; le altre in coda nell'ordine
+// in cui sono arrivate (dalla più recente). Stabile, così il secondo criterio tiene.
+func sortByPrice(cards []scryCard) {
+	unpriced := func(p float64) int {
+		if p == 0 {
+			return 1
+		}
+		return 0
+	}
+	slices.SortStableFunc(cards, func(a, b scryCard) int {
+		pa, pb := a.price(false), b.price(false)
+		if c := cmp.Compare(unpriced(pa), unpriced(pb)); c != 0 {
+			return c
+		}
+		return cmp.Compare(pa, pb)
+	})
+}
+
+// scryfallQuery: 0 risultati non è un errore, Scryfall risponde 404 su "nessun match".
+func scryfallQuery(ctx context.Context, params map[string]string) ([]scryCard, error) {
 	var list cardList
 	res, err := request(ctx, &list).
-		SetQueryParams(map[string]string{"unique": "cards", "q": q}).
+		SetQueryParams(params).
 		Get("/cards/search")
 	if err != nil {
 		return nil, err
@@ -116,9 +183,6 @@ func scryfallSearch(ctx context.Context, q string) ([]scryCard, error) {
 	}
 	if res.IsError() {
 		return nil, restErr(res)
-	}
-	if len(list.Data) > 30 {
-		list.Data = list.Data[:30]
 	}
 	return list.Data, nil
 }

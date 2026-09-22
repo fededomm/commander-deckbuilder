@@ -35,6 +35,7 @@ func routes() *echo.Echo {
 
 	e.GET("/deck/:id", deckPageHandler)
 	e.GET("/deck/:id/search", searchHandler)
+	e.GET("/deck/:id/prints", printsHandler)
 	e.POST("/deck/:id/cards", addCardHandler)
 	e.POST("/deck/:id/prices", refreshPricesHandler)
 	e.GET("/deck/:id/export", exportHandler)

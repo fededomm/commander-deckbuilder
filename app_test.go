@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -166,6 +168,124 @@ func TestMoxfieldRoundTrip(t *testing.T) {
 	}
 }
 
+// La stampa scritta nella lista fa fede: se Scryfall non ha quell'espansione la
+// riga è mancante, non diventa un'altra ristampa della stessa carta.
+func TestMatchPrintings(t *testing.T) {
+	found := []scryCard{
+		{ID: "1", Name: "Sol Ring", Set: "eoc", CollectorNumber: "57"},
+		{ID: "2", Name: "Sol Ring", Set: "c21", CollectorNumber: "263"},
+		{ID: "3", Name: "Kefka, Court Mage // Kefka, Ruler of Ruin", Set: "fin", CollectorNumber: "97"},
+	}
+	lines := []MoxfieldLine{
+		{Qty: 1, Name: "Sol Ring", SetCode: "c21", CollectorNumber: "263"}, // stampa esatta
+		{Qty: 1, Name: "Sol Ring"}, // senza stampa: vale il nome
+		{Qty: 1, Name: "Sol Ring", SetCode: "lea", CollectorNumber: "270"}, // stampa che non c'è
+		{Qty: 1, Name: "Kefka, Court Mage / Kefka, Ruler of Ruin"},         // bifacciale alla Moxfield
+	}
+	rows, missing := matchPrintings(lines, found)
+
+	if len(rows) != 3 {
+		t.Fatalf("%d righe risolte, ne voglio 3", len(rows))
+	}
+	if rows[0].SetCode != "c21" || rows[0].CollectorNumber != "263" {
+		t.Errorf("stampa esatta ignorata: %s %s", rows[0].SetCode, rows[0].CollectorNumber)
+	}
+	if rows[1].ScryfallID != "1" { // senza stampa prende la prima che Scryfall ha dato
+		t.Errorf("fallback sul nome = %q", rows[1].ScryfallID)
+	}
+	if rows[2].ScryfallID != "3" {
+		t.Errorf("bifacciale non riconosciuta: %q", rows[2].ScryfallID)
+	}
+	if len(missing) != 1 || missing[0].SetCode != "lea" {
+		t.Errorf("la stampa inesistente deve finire fra le mancanti: %+v", missing)
+	}
+}
+
+func TestSortByPrice(t *testing.T) {
+	priced := func(set, p string) scryCard {
+		c := scryCard{Set: set}
+		c.Prices.EUR = &p
+		return c
+	}
+	cards := []scryCard{
+		{Set: "sld"}, // non quotata, arrivata per prima
+		priced("c21", "1.50"),
+		{Set: "slz"}, // non quotata
+		priced("eoc", "0.80"),
+	}
+	sortByPrice(cards)
+	var got []string
+	for _, c := range cards {
+		got = append(got, c.Set)
+	}
+	// quotate dalla più economica, le altre in coda nell'ordine d'arrivo
+	if want := []string{"eoc", "c21", "sld", "slz"}; !slices.Equal(got, want) {
+		t.Errorf("ordine = %v, voglio %v", got, want)
+	}
+}
+
+func TestPaginate(t *testing.T) {
+	cards := make([]scryCard, 14) // 14 stampe = 2 pagine da 12
+	for i := range cards {
+		cards[i].Set = itoa(i)
+	}
+	p := paginate(cards, 2)
+	if p.Count != 2 || p.Total != 14 || len(p.Items) != 2 {
+		t.Fatalf("pagina 2 = %d/%d, %d elementi", p.Num, p.Count, len(p.Items))
+	}
+	if p.Items[0].Set != "12" {
+		t.Errorf("la pagina 2 comincia da %q", p.Items[0].Set)
+	}
+	// fuori range non è un errore: mi riporta dentro
+	if paginate(cards, 0).Num != 1 || paginate(cards, 99).Num != 2 {
+		t.Error("le pagine fuori range devono rientrare")
+	}
+	if e := paginate(nil, 1); e.Count != 1 || len(e.Items) != 0 {
+		t.Errorf("elenco vuoto = %+v", e)
+	}
+}
+
+func TestPageURL(t *testing.T) {
+	q := url.Values{"oracle": {"abc"}, "page": {"3"}}
+	if got := pageURL(q, 5, 4); got != "/deck/5/prints?oracle=abc&page=4" {
+		t.Errorf("pageURL = %q", got)
+	}
+	if len(q["page"]) != 1 || q["page"][0] != "3" {
+		t.Error("pageURL non deve toccare la query di partenza")
+	}
+}
+
+func TestPrintsURL(t *testing.T) {
+	oracle := scryCard{OracleID: "1e4a7ae3", Name: "Sol Ring"}
+	if got := printsURL(7, oracle); got != "/deck/7/prints?oracle=1e4a7ae3" {
+		t.Errorf("printsURL = %q", got)
+	}
+	// senza oracle_id (carte "reversible") ripiega sul nome, con l'escape giusto
+	if got := printsURL(7, scryCard{Name: "Bind // Liberate"}); got != "/deck/7/prints?name=Bind+%2F%2F+Liberate" {
+		t.Errorf("printsURL senza oracle = %q", got)
+	}
+	if got := printYear("2024-08-02"); got != "2024" {
+		t.Errorf("printYear = %q", got)
+	}
+	if printYear("") != "" {
+		t.Error("printYear su data vuota non deve esplodere")
+	}
+}
+
+// Scryfall identifica l'app da qui: nome, versione e un recapito raggiungibile.
+// Con un URL finto il ban è a loro discrezione.
+func TestUserAgent(t *testing.T) {
+	if !strings.HasPrefix(userAgent, "commander-deckbuilder/") {
+		t.Errorf("User-Agent senza nome app: %q", userAgent)
+	}
+	if !strings.Contains(userAgent, "(+https://github.com/fededomm/commander-deckbuilder)") {
+		t.Errorf("User-Agent senza recapito: %q", userAgent)
+	}
+	if buildVersion() == "" {
+		t.Error("la versione non deve essere vuota")
+	}
+}
+
 func TestEur(t *testing.T) {
 	for v, want := range map[float64]string{
 		0: "0,00\u00a0€", 2.5: "2,50\u00a0€", 1234.5: "1.234,50\u00a0€",
@@ -241,6 +361,15 @@ func TestDBEIRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	res, err := http.Get(srv.URL + "/deck/" + itoa64(id) + "/prints")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest { // senza oracle né nome non si va su Scryfall
+		t.Errorf("GET /prints senza parametri -> %d", res.StatusCode)
+	}
+
 	cards, _ := deckCards(db, id)
 	if len(cards) != 3 {
 		t.Fatalf("%d carte, ne voglio 3", len(cards))
@@ -274,7 +403,7 @@ func TestDBEIRoutes(t *testing.T) {
 	}
 
 	// export in formato Moxfield
-	res, err := http.Get(srv.URL + "/deck/" + itoa64(id) + "/export")
+	res, err = http.Get(srv.URL + "/deck/" + itoa64(id) + "/export")
 	if err != nil {
 		t.Fatal(err)
 	}
