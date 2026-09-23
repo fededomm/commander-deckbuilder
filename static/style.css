@@ -606,6 +606,66 @@ span.thumb { background: var(--surface-2); }
 }
 #preview[hidden] { display: none; }
 
+/* --- login -------------------------------------------------------------
+   Solo online, con AUTH_PASSWORD. Una card al centro, i cinque colori in
+   testa come unico ornamento: il resto è la stessa palette dell'app. */
+
+.login {
+	flex: 1;
+	display: grid;
+	place-items: center;
+	padding: 3rem var(--pad);
+	/* un alone viola appena accennato dietro la card, niente immagini */
+	background: radial-gradient(40rem 26rem at 50% 38%, #6d4aff1f, transparent 70%);
+}
+.login-card {
+	position: relative;
+	width: 100%;
+	max-width: 380px;
+	display: flex;
+	flex-direction: column;
+	padding: 2.25rem 1.75rem 1.75rem;
+	border: 1px solid var(--line-soft);
+	border-radius: 16px;
+	background: var(--surface);
+	box-shadow: 0 24px 60px -24px #000c;
+	text-align: center;
+	overflow: hidden;
+}
+/* la striscia WUBRG sul bordo alto della card */
+.login-card::before {
+	content: "";
+	position: absolute;
+	inset: 0 0 auto;
+	height: 3px;
+	background: linear-gradient(90deg, var(--mana-w), var(--mana-u), var(--mana-b), var(--mana-r), var(--mana-g));
+}
+.login-mana { display: flex; justify-content: center; gap: 6px; margin-bottom: 1.25rem; }
+.login-logo { align-self: center; border-radius: 14px; margin-bottom: 1rem; }
+.login h1 { font-size: 1.375rem; line-height: 1.25; margin: 0 0 .4rem; letter-spacing: -.01em; }
+.login .sub { color: var(--dim); font-size: .9375rem; margin: 0 0 1.75rem; }
+.login label { text-align: left; font-size: .875rem; font-weight: 600; margin-bottom: .4rem; }
+
+.login-field { position: relative; display: flex; align-items: center; }
+.login-field .icon { position: absolute; left: .85rem; color: var(--dim); pointer-events: none; }
+.login-field input {
+	width: 100%;
+	/* 16px anche qui: sotto, Safari iOS zooma sul campo al focus */
+	font-size: 1rem;
+	padding: .75rem .8rem .75rem 2.6rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--fg);
+	transition: border-color .18s ease;
+}
+.login-field input:focus { border-color: var(--accent-soft); }
+.login-field input[aria-invalid="true"] { border-color: var(--err); }
+.login-field:focus-within .icon { color: var(--accent-soft); }
+
+.login .note.error { text-align: left; margin: .5rem 0 0; }
+.login .btn-primary { margin-top: 1.25rem; min-height: 44px; }
+
 /* --- footer legale ------------------------------------------------------
    Fan Content Policy: la dicitura Wizards deve esserci, in chiaro. Sta in
    fondo a ogni pagina, non dentro un menu o un popup. */

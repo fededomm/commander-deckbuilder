@@ -14,8 +14,11 @@ go run ./tools/symbols # riscarica gli SVG dei simboli (solo se Scryfall ne aggi
 
 Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite, o URL `libsql://` di Turso con il token in `TURSO_AUTH_TOKEN`), `-no-browser`.
 
+Online: con `AUTH_PASSWORD` impostata ogni pagina passa da `/login` (cookie firmato, 90 giorni). Senza, l'app resta aperta come in locale.
+
 - `main.go` — avvio: flag, scelta del DB, porta, apertura del browser
 - `lifecycle.go` — `/alive`, spegnimento a finestre chiuse
+- `auth.go` — login con password unica, solo se c'è `AUTH_PASSWORD`
 - `routes.go` — le rotte echo, l'error handler e gli helper condivisi
 - `handlers_home.go` — elenco mazzi, creazione, cancellazione, import Moxfield
 - `handlers_deck.go` — pagina mazzo: ricerca, checklist, prezzi, export

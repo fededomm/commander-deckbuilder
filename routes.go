@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/subtle"
 	"log"
 	"net/http"
 	"os"
@@ -18,12 +17,11 @@ func routes() *echo.Echo {
 	e.HideBanner, e.HidePort = true, true
 	e.Use(middleware.Recover()) // un panic in un handler non deve buttare giù l'app
 
-	// Online (Render) l'app è pubblica: con AUTH_PASSWORD impostata chiede la
-	// password via Basic Auth, sopra l'HTTPS di Render. In locale resta aperta.
+	// Online (Render) l'app è pubblica: con AUTH_PASSWORD impostata serve il
+	// login. In locale la variabile non c'è e l'app resta aperta.
 	if pw := os.Getenv("AUTH_PASSWORD"); pw != "" {
-		e.Use(middleware.BasicAuth(func(_, p string, _ echo.Context) (bool, error) {
-			return subtle.ConstantTimeCompare([]byte(p), []byte(pw)) == 1, nil
-		}))
+		e.Use(requireAuth(pw))
+		e.Match([]string{http.MethodGet, http.MethodPost}, "/login", loginHandler(pw))
 	}
 
 	// Un errore che esce da un handler diventa 500 e finisce nel log; per gli altri

@@ -1,0 +1,40 @@
+package main
+
+// loginPage: form classico, niente htmx — dopo il login serve una pagina intera
+// nuova, e un POST normale con redirect 303 fa esattamente quello.
+templ loginPage(wrong bool) {
+	@layout("Accedi · Commander Deckbuilder") {
+		<main class="login">
+			<form class="login-card" method="post" action="/login">
+				<div class="login-mana" aria-hidden="true">
+					for _, c := range "WUBRG" {
+						<span class={ "pip", "pip-" + string(c) }></span>
+					}
+				</div>
+				<img class="login-logo" src="/static/icon.png" alt="" width="56" height="56"/>
+				<h1>Commander Deckbuilder</h1>
+				<p class="sub">Questa istanza è privata. Inserisci la password per entrare.</p>
+				<label for="password">Password</label>
+				<div class="login-field">
+					@iconLock()
+					<input
+						id="password"
+						name="password"
+						type="password"
+						autocomplete="current-password"
+						required
+						autofocus
+						if wrong {
+							aria-invalid="true"
+							aria-describedby="login-error"
+						}
+					/>
+				</div>
+				if wrong {
+					<p id="login-error" class="note error" role="alert">Password sbagliata, riprova.</p>
+				}
+				<button class="btn-primary">Entra</button>
+			</form>
+		</main>
+	}
+}

@@ -556,21 +556,49 @@ func TestAuthPassword(t *testing.T) {
 	t.Setenv("AUTH_PASSWORD", "segreta")
 	srv := httptest.NewServer(routes())
 	defer srv.Close()
-	for _, tc := range []struct {
-		pw   string
-		want int
-	}{{"", 401}, {"sbagliata", 401}, {"segreta", 200}} {
-		req, _ := http.NewRequest("GET", srv.URL+"/static/style.css", nil)
-		if tc.pw != "" {
-			req.SetBasicAuth("io", tc.pw)
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	do := func(method, path string, body url.Values, hdr map[string]string) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range hdr {
+			req.Header.Set(k, v)
 		}
-		res, err := http.DefaultClient.Do(req)
+		res, err := noFollow.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
 		res.Body.Close()
-		if res.StatusCode != tc.want {
-			t.Errorf("password %q: %d, voglio %d", tc.pw, res.StatusCode, tc.want)
+		return res
+	}
+
+	if res := do("GET", "/deck/x", nil, nil); res.StatusCode != 303 || res.Header.Get("Location") != "/login" {
+		t.Errorf("senza login: %d %q, voglio 303 verso /login", res.StatusCode, res.Header.Get("Location"))
+	}
+	if res := do("POST", "/cards/1/toggle", nil, map[string]string{"HX-Request": "true"}); res.StatusCode != 401 ||
+		res.Header.Get("HX-Redirect") != "/login" {
+		t.Errorf("htmx senza login: %d, voglio 401 con HX-Redirect", res.StatusCode)
+	}
+	for _, p := range []string{"/login", "/static/style.css"} {
+		if res := do("GET", p, nil, nil); res.StatusCode != 200 {
+			t.Errorf("%s deve essere pubblica: %d", p, res.StatusCode)
 		}
+	}
+	if res := do("POST", "/login", url.Values{"password": {"sbagliata"}}, nil); len(res.Cookies()) != 0 {
+		t.Error("password sbagliata: niente cookie")
+	}
+	res := do("POST", "/login", url.Values{"password": {"segreta"}}, nil)
+	if res.StatusCode != 303 || len(res.Cookies()) != 1 {
+		t.Fatalf("login: %d, %d cookie", res.StatusCode, len(res.Cookies()))
+	}
+	ck := res.Cookies()[0]
+	// col cookie si passa: /deck/x arriva all'handler, che rifiuta l'id (400)
+	if res := do("GET", "/deck/x", nil, map[string]string{"Cookie": ck.Name + "=" + ck.Value}); res.StatusCode != 400 {
+		t.Errorf("col cookie: %d, voglio 400 dall'handler", res.StatusCode)
+	}
+	if res := do("GET", "/deck/x", nil, map[string]string{"Cookie": ck.Name + "=falso"}); res.StatusCode != 303 {
+		t.Errorf("cookie falso: %d, voglio 303", res.StatusCode)
 	}
 }
