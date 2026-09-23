@@ -708,9 +708,30 @@ span.thumb { background: var(--surface-2); }
 	.deck-link { flex: 1 1 100%; }
 	.deck-price { flex-direction: row; align-items: baseline; gap: .5rem; }
 	.new-deck { flex-wrap: wrap; }
+	/* il campo prende la riga intera, altrimenti il placeholder resta a metà */
+	.new-deck input { flex-basis: 100%; }
 	.new-deck .btn-primary { flex: 1; }
 	/* la riga è già stretta: resta il codice espansione, il numero di collezione no */
 	.row .set-num { display: none; }
+	/* In fila su 390px il nome restava "T…": sopra il nome a tutta larghezza,
+	   sotto espansione e costo di mana. Prezzo e cestino restano a destra. */
+	.row {
+		display: grid;
+		grid-template-columns: auto auto auto 1fr auto auto;
+		grid-template-areas:
+			"check thumb name name price del"
+			"check thumb set  mana price del";
+		column-gap: .5rem;
+		row-gap: .15rem;
+		padding-block: .35rem;
+	}
+	.row .check-box { grid-area: check; }
+	.row .thumb { grid-area: thumb; }
+	.row .name { grid-area: name; }
+	.row .set { grid-area: set; justify-self: start; }
+	.row .mana { grid-area: mana; }
+	.row .price { grid-area: price; min-width: 0; }
+	.row .icon-btn { grid-area: del; }
 	#prints { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); }
 	.pager .note { font-size: .8125rem; }
 }

@@ -39,3 +39,10 @@ addEventListener("htmx:afterRequest", (e) => {
 // finestra cade e il server si ferma da solo. Fra una pagina e l'altra si
 // riapre da sé, e il server aspetta qualche secondo prima di arrendersi.
 new EventSource("/alive");
+
+// Focus sulla ricerca solo quando sta accanto alla checklist. Sotto i 900px è in
+// fondo alla pagina: autofocus faceva aprire il mazzo già scrollato giù, tastiera
+// compresa. Stessa soglia della @media in style.css.
+addEventListener("DOMContentLoaded", () => {
+  if (matchMedia("(min-width: 901px)").matches) document.getElementById("q")?.focus();
+});

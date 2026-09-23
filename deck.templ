@@ -19,7 +19,6 @@ templ deckPage(deck Deck, cards []Card) {
 					id="q"
 					name="q"
 					placeholder="Sol Ring, t:creature c:g, …"
-					autofocus
 					autocomplete="off"
 					hx-get={ "/deck/" + itoa64(deck.ID) + "/search" }
 					hx-trigger="input changed delay:300ms"
