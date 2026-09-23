@@ -551,3 +551,26 @@ func TestPctNonDividePerZero(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthPassword(t *testing.T) {
+	t.Setenv("AUTH_PASSWORD", "segreta")
+	srv := httptest.NewServer(routes())
+	defer srv.Close()
+	for _, tc := range []struct {
+		pw   string
+		want int
+	}{{"", 401}, {"sbagliata", 401}, {"segreta", 200}} {
+		req, _ := http.NewRequest("GET", srv.URL+"/static/style.css", nil)
+		if tc.pw != "" {
+			req.SetBasicAuth("io", tc.pw)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != tc.want {
+			t.Errorf("password %q: %d, voglio %d", tc.pw, res.StatusCode, tc.want)
+		}
+	}
+}
