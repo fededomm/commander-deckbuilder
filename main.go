@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -27,18 +28,20 @@ var db *sql.DB
 
 func main() {
 	noBrowser := flag.Bool("no-browser", false, "non aprire il browser all'avvio")
-	dbPath := flag.String("db", defaultDBPath(), "percorso del file SQLite")
+	dbPath := flag.String("db", defaultDBPath(), "percorso del file SQLite, oppure URL libsql:// di Turso (token in TURSO_AUTH_TOKEN)")
 	port := flag.Int("port", 8090, "porta HTTP (0 = una libera qualsiasi)")
 	host := flag.String("host", "localhost", "interfaccia su cui ascoltare (\"\" = tutte, per il deploy)")
 	idleQuit := flag.Duration("idle-quit", 5*time.Second,
 		"esce dopo questo tempo senza finestre aperte (0 = resta acceso)")
 	flag.Parse()
 
-	dataDir := filepath.Dir(*dbPath)
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		log.Fatalf("cartella dati: %v", err)
+	if !strings.HasPrefix(*dbPath, "libsql://") { // Turso: niente cartella locale
+		dataDir := filepath.Dir(*dbPath)
+		if err := os.MkdirAll(dataDir, 0o755); err != nil {
+			log.Fatalf("cartella dati: %v", err)
+		}
+		logToFile(dataDir)
 	}
-	logToFile(dataDir)
 	var err error
 	if db, err = openDB(*dbPath); err != nil {
 		log.Fatalf("database %s: %v", *dbPath, err)

@@ -12,7 +12,7 @@ go generate ./...      # rigenera i *_templ.go dopo aver toccato un .templ
 go run ./tools/symbols # riscarica gli SVG dei simboli (solo se Scryfall ne aggiunge)
 ```
 
-Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite), `-no-browser`.
+Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite, o URL `libsql://` di Turso con il token in `TURSO_AUTH_TOKEN`), `-no-browser`.
 
 - `main.go` — avvio: flag, scelta del DB, porta, apertura del browser
 - `lifecycle.go` — `/alive`, spegnimento a finestre chiuse

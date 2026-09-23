@@ -3,8 +3,10 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
+	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
 )
 
@@ -57,8 +59,15 @@ CREATE TABLE IF NOT EXISTS cards (
   UNIQUE (deck_id, scryfall_id)
 );`
 
+// openDB: un percorso è un file SQLite locale; un URL libsql:// è Turso (deploy
+// su Render free, dove il disco del container sparisce a ogni spin-down).
+// Il token di Turso arriva da TURSO_AUTH_TOKEN, mai dal flag: finirebbe nei log.
 func openDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	driver, dsn := "sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+	if strings.HasPrefix(path, "libsql://") {
+		driver, dsn = "libsql", path+"?authToken="+os.Getenv("TURSO_AUTH_TOKEN")
+	}
+	db, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -201,8 +210,13 @@ func insertCards(db *sql.DB, deckID int64, cards []Card) error {
 	return tx.Commit()
 }
 
+// Le carte le cancello a mano: su Turso via HTTP il PRAGMA foreign_keys non
+// sopravvive tra una richiesta e l'altra, quindi il CASCADE non è garantito.
 func deleteDeck(db *sql.DB, id int64) error {
-	_, err := db.Exec(`DELETE FROM decks WHERE id = ?`, id) // le carte seguono via ON DELETE CASCADE
+	if _, err := db.Exec(`DELETE FROM cards WHERE deck_id = ?`, id); err != nil {
+		return err
+	}
+	_, err := db.Exec(`DELETE FROM decks WHERE id = ?`, id)
 	return err
 }
 
