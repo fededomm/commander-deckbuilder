@@ -51,6 +51,11 @@ per una feature: non è quello che fa il resto del codice.
   ogni azione sul mazzo (aggiungi, toggle, rimuovi, prezzi) risponde con
   `renderChecklist(c, deckID)`. Un'azione nuova sul mazzo fa lo stesso: non inventare
   swap parziali di una riga, il conteggio e i totali in testa cambierebbero senza aggiornarsi.
+  **Eccezione: le spunte** (`POST /deck/:id/purchased`). Rispondono solo con
+  `purchaseStats` (contatori + statistiche, `hx-swap-oob`) e la casella ha `hx-swap="none"`
+  e `hx-sync="#deck:queue all"`. Ridisegnare le righe a ogni spunta cancellava la spunta di
+  una carta cliccata mentre la richiesta precedente era in volo. Il barrato della riga viene
+  da `:has(.check:checked)`, non da una classe. Non tornare a `renderChecklist` lì.
 - **La home si rimpiazza per `#list`**: `deleteDeckHandler` risponde con `deckList(decks)`
   e il bottone ha `hx-target="#list"`.
 - **Creare qualcosa che ha una pagina sua** → header `HX-Redirect` + `204 No Content`
@@ -64,7 +69,7 @@ per una feature: non è quello che fa il resto del codice.
 - **JS**: `app.js` delega sul `document` perché htmx rimpiazza i nodi di continuo.
   Un listener attaccato a un elemento sparisce al primo swap.
 - Le query su una carta (`/cards/:id/…`) leggono prima il `deck_id` e lo restituiscono
-  (`togglePurchased`, `deleteCard`): serve per rirenderizzare la checklist giusta.
+  (`deleteCard`): serve per rirenderizzare la checklist giusta.
 
 ## Stile del codice
 

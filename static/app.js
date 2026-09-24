@@ -46,3 +46,65 @@ new EventSource("/alive");
 addEventListener("DOMContentLoaded", () => {
   if (matchMedia("(min-width: 901px)").matches) document.getElementById("q")?.focus();
 });
+
+// --- filtro e "seleziona tutte" sulle carte del mazzo ---------------------
+// Il filtro è solo lato client: le righe sono già nella pagina, basta nasconderle.
+
+function visibleChecks() {
+  return [...document.querySelectorAll("#deck .row:not([hidden]) .check")];
+}
+
+// La casella "tutte" rispecchia le righe visibili: piena, vuota o a metà.
+function syncCheckAll() {
+  const all = document.getElementById("check-all");
+  if (!all) return;
+  const boxes = visibleChecks();
+  const n = boxes.filter((b) => b.checked).length;
+  all.checked = boxes.length > 0 && n === boxes.length;
+  all.indeterminate = n > 0 && n < boxes.length;
+}
+
+function applyFilter() {
+  const deck = document.getElementById("deck");
+  if (!deck) return;
+  const q = (document.getElementById("filter")?.value || "").trim().toLowerCase();
+  for (const row of deck.querySelectorAll(".row")) {
+    const name = row.querySelector(".name");
+    // nel title c'è il tipo: "creature" o "instant" filtrano come il nome
+    row.hidden = q !== "" && !(name.textContent + " " + name.title).toLowerCase().includes(q);
+  }
+  for (const s of deck.querySelectorAll("section")) {
+    s.hidden = !s.querySelector(".row:not([hidden])");
+  }
+  document.getElementById("filter-empty").hidden = !!deck.querySelector(".row:not([hidden])");
+  syncCheckAll();
+}
+
+addEventListener("input", (e) => {
+  if (e.target.id === "filter") applyFilter();
+});
+
+// "Tutte": spunto subito le caselle nel browser e mando una richiesta sola con
+// gli id cambiati. Stessa coda (hx-sync su #deck) delle spunte singole.
+addEventListener("change", (e) => {
+  const el = e.target;
+  if (el.id !== "check-all") {
+    if (el.classList.contains("check")) syncCheckAll();
+    return;
+  }
+  const on = el.checked;
+  const ids = visibleChecks()
+    .filter((b) => b.checked !== on)
+    .map((b) => ((b.checked = on), b.dataset.id));
+  if (ids.length === 0) return;
+  htmx.ajax("POST", el.dataset.url, {
+    source: el,
+    swap: "none",
+    values: { ids: ids.join(","), purchased: on ? "1" : "" },
+  });
+});
+
+// Aggiunta, rimozione e prezzi ridisegnano la checklist: il filtro resta (hx-preserve)
+// e va riapplicato alle righe nuove.
+addEventListener("htmx:afterSettle", applyFilter);
+addEventListener("DOMContentLoaded", applyFilter);

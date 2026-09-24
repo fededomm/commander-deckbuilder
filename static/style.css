@@ -385,6 +385,20 @@ code {
 /* --- righe della checklist --------------------------------------------- */
 
 #deck { max-width: 960px; padding: 0 var(--pad) 4rem; }
+/* .row e le section hanno un display loro, che batterebbe il [hidden] del browser */
+#deck [hidden] { display: none; }
+#filter-empty { margin-top: 1.75rem; }
+
+/* filtro + "seleziona tutte": la casella sta in colonna con quelle delle righe */
+.deck-tools {
+	display: flex;
+	align-items: center;
+	gap: .65rem;
+	max-width: 960px;
+	padding: 1.25rem calc(var(--pad) + .45rem) 0;
+}
+.deck-tools .icon-field { flex: 1; }
+.deck-tools .icon-field input { padding-block: .55rem; }
 
 h3 {
 	display: flex;
@@ -411,8 +425,10 @@ h3 span { font-variant-numeric: tabular-nums; }
 	transition: background-color .15s ease;
 }
 .row:hover { background: var(--surface); }
-.row.done .name { text-decoration: line-through; color: var(--dim); }
-.row.done .thumb { opacity: .5; }
+/* Dallo stato della casella, non da una classe: dopo una spunta la riga non
+   viene ridisegnata dal server, cambia solo la casella. */
+.row:has(.check:checked) .name { text-decoration: line-through; color: var(--dim); }
+.row:has(.check:checked) .thumb { opacity: .5; }
 
 /* 44×44 di area cliccabile attorno a una casella che ne misura 20. */
 .check-box {
@@ -646,9 +662,10 @@ span.thumb { background: var(--surface-2); }
 .login .sub { color: var(--dim); font-size: .9375rem; margin: 0 0 1.75rem; }
 .login label { text-align: left; font-size: .875rem; font-weight: 600; margin-bottom: .4rem; }
 
-.login-field { position: relative; display: flex; align-items: center; }
-.login-field .icon { position: absolute; left: .85rem; color: var(--dim); pointer-events: none; }
-.login-field input {
+/* campo con icona a sinistra: login e filtro del mazzo */
+.icon-field { position: relative; display: flex; align-items: center; }
+.icon-field .icon { position: absolute; left: .85rem; color: var(--dim); pointer-events: none; }
+.icon-field input {
 	width: 100%;
 	/* 16px anche qui: sotto, Safari iOS zooma sul campo al focus */
 	font-size: 1rem;
@@ -659,9 +676,9 @@ span.thumb { background: var(--surface-2); }
 	color: var(--fg);
 	transition: border-color .18s ease;
 }
-.login-field input:focus { border-color: var(--accent-soft); }
-.login-field input[aria-invalid="true"] { border-color: var(--err); }
-.login-field:focus-within .icon { color: var(--accent-soft); }
+.icon-field input:focus { border-color: var(--accent-soft); }
+.icon-field input[aria-invalid="true"] { border-color: var(--err); }
+.icon-field:focus-within .icon { color: var(--accent-soft); }
 
 .login .note.error { text-align: left; margin: .5rem 0 0; }
 .login .btn-primary { margin-top: 1.25rem; min-height: 44px; }

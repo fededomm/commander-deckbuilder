@@ -42,8 +42,7 @@ templ deckPage(deck Deck, cards []Card) {
 // checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, statistiche
 // e righe. L'intestazione sta dentro perché i totali cambiano a ogni spunta.
 templ checklist(deck Deck, cards []Card) {
-	{{ t := totals(cards) }}
-	{{ bought, total := purchasedQty(cards), qty(cards) }}
+	{{ total := qty(cards) }}
 	<div id="checklist" hx-target="this" hx-swap="outerHTML">
 		<header class="deck-bar">
 			<a class="crumb" href="/">
@@ -55,11 +54,7 @@ templ checklist(deck Deck, cards []Card) {
 				@pips(deckColors(cards))
 			</div>
 			if total > 0 {
-				<p class="deck-counts">
-					<strong>{ itoa(bought) }/{ itoa(total) }</strong> acquistate
-					<span class="sep">·</span>
-					<strong>{ eur(t.Total) }</strong>
-				</p>
+				@deckCounts(cards, false)
 			}
 			<div class="deck-actions">
 				<a class="btn-ghost only-narrow" href="#finder">
@@ -93,35 +88,26 @@ templ checklist(deck Deck, cards []Card) {
 				Cerca una carta nel pannello di ricerca e clicca il risultato per aggiungerla.
 			</p>
 		} else {
-			<section class="deck-stats" aria-label="Statistiche del mazzo">
-				<div class="figures">
-					<div class="figure wide">
-						<dt>Avanzamento acquisti</dt>
-						<dd>
-							{ itoa(pct(bought, total)) }%
-							<span class="progress" aria-hidden="true">
-								<span style={ barWidth(pct(bought, total)) }></span>
-							</span>
-						</dd>
-					</div>
-					<div class="figure">
-						<dt>Da comprare</dt>
-						<dd>{ eur(t.Todo) }</dd>
-					</div>
-					<div class="figure">
-						<dt>Valore totale</dt>
-						<dd>{ eur(t.Total) }</dd>
-					</div>
-					if t.Unpriced > 0 {
-						<div class="figure">
-							<dt>Senza quotazione</dt>
-							<dd>{ itoa(t.Unpriced) }</dd>
-						</div>
-					}
+			@deckStats(cards, false)
+			<div id="deck-tools" class="deck-tools" hx-preserve="true">
+				// Casella "tutte": agisce solo sulle righe visibili, cioè su quelle
+				// che il filtro lascia passare. Lo stato lo tiene aggiornato app.js.
+				<label class="check-box" title="Seleziona tutte le carte visibili">
+					<input
+						id="check-all"
+						class="check"
+						type="checkbox"
+						aria-label="Segna come acquistate tutte le carte visibili"
+						data-url={ "/deck/" + itoa64(deck.ID) + "/purchased" }
+						hx-sync="#deck:queue all"
+					/>
+				</label>
+				<label class="sr-only" for="filter">Filtra le carte del mazzo</label>
+				<div class="icon-field">
+					@iconSearch()
+					<input id="filter" type="search" placeholder="Filtra per nome o tipo" autocomplete="off"/>
 				</div>
-				@manaCurveChart(cards)
-				@colorSpread(cards)
-			</section>
+			</div>
 			<div id="deck">
 				for _, g := range groupByCategory(cards) {
 					<section>
@@ -134,9 +120,72 @@ templ checklist(deck Deck, cards []Card) {
 						}
 					</section>
 				}
+				<p id="filter-empty" class="empty-state" hidden>Nessuna carta del mazzo corrisponde al filtro.</p>
 			</div>
 		}
 	</div>
+}
+
+// deckCounts e deckStats sono le parti della checklist che dipendono dalle spunte.
+// Con oob tornano da sole, out-of-band, dopo ogni spunta: le righe restano ferme.
+templ deckCounts(cards []Card, oob bool) {
+	<p
+		id="deck-counts"
+		class="deck-counts"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<strong>{ itoa(purchasedQty(cards)) }/{ itoa(qty(cards)) }</strong> acquistate
+		<span class="sep">·</span>
+		<strong>{ eur(totals(cards).Total) }</strong>
+	</p>
+}
+
+templ deckStats(cards []Card, oob bool) {
+	{{ t := totals(cards) }}
+	{{ bought, total := purchasedQty(cards), qty(cards) }}
+	<section
+		id="deck-stats"
+		class="deck-stats"
+		aria-label="Statistiche del mazzo"
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<div class="figures">
+			<div class="figure wide">
+				<dt>Avanzamento acquisti</dt>
+				<dd>
+					{ itoa(pct(bought, total)) }%
+					<span class="progress" aria-hidden="true">
+						<span style={ barWidth(pct(bought, total)) }></span>
+					</span>
+				</dd>
+			</div>
+			<div class="figure">
+				<dt>Da comprare</dt>
+				<dd>{ eur(t.Todo) }</dd>
+			</div>
+			<div class="figure">
+				<dt>Valore totale</dt>
+				<dd>{ eur(t.Total) }</dd>
+			</div>
+			if t.Unpriced > 0 {
+				<div class="figure">
+					<dt>Senza quotazione</dt>
+					<dd>{ itoa(t.Unpriced) }</dd>
+				</div>
+			}
+		</div>
+		@manaCurveChart(cards)
+		@colorSpread(cards)
+	</section>
+}
+
+templ purchaseStats(cards []Card) {
+	@deckCounts(cards, true)
+	@deckStats(cards, true)
 }
 
 // manaCurveChart: barre in CSS puro, nessuna libreria. aria-label porta gli stessi
@@ -185,7 +234,7 @@ templ colorSpread(cards []Card) {
 }
 
 templ cardRow(c Card) {
-	<div class={ "row", templ.KV("done", c.Purchased) }>
+	<div class="row">
 		// label attorno alla casella: l'area cliccabile arriva a 44px senza
 		// ingrassare la casella stessa
 		<label class="check-box">
@@ -193,8 +242,14 @@ templ cardRow(c Card) {
 				class="check"
 				type="checkbox"
 				checked?={ c.Purchased }
+				name="purchased"
+				value="1"
+				data-id={ itoa64(c.ID) }
 				aria-label={ "Acquistata: " + c.Name }
-				hx-post={ "/cards/" + itoa64(c.ID) + "/toggle" }
+				hx-post={ "/deck/" + itoa64(c.DeckID) + "/purchased" }
+				hx-vals={ `{"ids":"` + itoa64(c.ID) + `"}` }
+				hx-swap="none"
+				hx-sync="#deck:queue all"
 			/>
 		</label>
 		if c.Image != "" {

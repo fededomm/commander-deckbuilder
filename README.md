@@ -158,6 +158,6 @@ Restituiscono frammenti HTML per htmx, non JSON.
 | `POST /deck/:id/cards` | aggiunge (`scryfall_id`); doppione ignorato |
 | `POST /deck/:id/prices` | riallinea i prezzi a Scryfall |
 | `GET /deck/:id/export` | scarica in formato Moxfield |
-| `POST /cards/:id/toggle` | inverte "acquistata" |
+| `POST /deck/:id/purchased` | `ids=1,2,3` + `purchased=1` (o vuoto): imposta "acquistata", risponde con contatori e statistiche out-of-band |
 | `DELETE /cards/:id` | rimuove la carta |
 | `GET /alive` | resta aperta finché la pagina è aperta; se cadono tutte, il server esce |

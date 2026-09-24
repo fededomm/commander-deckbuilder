@@ -391,23 +391,73 @@ func TestDBEIRoutes(t *testing.T) {
 	if sol.Name != "Sol Ring" {
 		t.Fatalf("ordinamento inatteso: %q", sol.Name)
 	}
-	post(t, srv.URL+"/cards/"+itoa64(sol.ID)+"/toggle")
-	cards, _ = deckCards(db, id)
-	if !cards[2].Purchased {
-		t.Error("toggle non ha spuntato la carta")
+	// Spunte: lo stato voluto, non "inverti". Ripetere la stessa richiesta (doppio
+	// clic, due richieste in volo) non deve ribaltarla.
+	purchase := func(ids string, on bool) *http.Response {
+		t.Helper()
+		v := url.Values{"ids": {ids}}
+		if on {
+			v.Set("purchased", "1")
+		}
+		res, err := http.PostForm(srv.URL+"/deck/"+itoa64(id)+"/purchased", v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
 	}
-	post(t, srv.URL+"/cards/"+itoa64(sol.ID)+"/toggle")
-	cards, _ = deckCards(db, id)
-	if cards[2].Purchased {
-		t.Error("il secondo toggle deve togliere la spunta")
+	isPurchased := func() map[int64]bool {
+		cards, _ := deckCards(db, id)
+		m := map[int64]bool{}
+		for _, c := range cards {
+			m[c.ID] = c.Purchased
+		}
+		return m
 	}
+	res = purchase(itoa64(sol.ID), true)
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	// solo contatori e statistiche, out-of-band: le righe non tornano
+	if !strings.Contains(string(body), `id="deck-counts" class="deck-counts" hx-swap-oob="true"`) ||
+		!strings.Contains(string(body), `id="deck-stats"`) || strings.Contains(string(body), `class="row"`) {
+		t.Errorf("risposta alla spunta inattesa:\n%s", body)
+	}
+	purchase(itoa64(sol.ID), true).Body.Close()
+	if !isPurchased()[sol.ID] {
+		t.Error("due spunte uguali devono lasciare la carta acquistata")
+	}
+	purchase(itoa64(sol.ID), false).Body.Close()
+	if isPurchased()[sol.ID] {
+		t.Error("purchased vuoto deve togliere la spunta")
+	}
+	// "seleziona tutte": più id insieme, e un id di un altro mazzo non si tocca
+	other, _ := createDeck(db, "Altro")
+	insertCards(db, other, []Card{{ScryfallID: "x", Name: "Estranea"}})
+	stranger, _ := deckCards(db, other)
+	all := []string{}
+	for cid := range isPurchased() {
+		all = append(all, itoa64(cid))
+	}
+	purchase(strings.Join(append(all, itoa64(stranger[0].ID)), ","), true).Body.Close()
+	for cid, p := range isPurchased() {
+		if !p {
+			t.Errorf("carta %d non spuntata da \"tutte\"", cid)
+		}
+	}
+	if stranger, _ = deckCards(db, other); stranger[0].Purchased {
+		t.Error("una carta di un altro mazzo non deve cambiare")
+	}
+	purchase(strings.Join(all, ","), false).Body.Close()
+	if res := purchase("1,abc", true); res.StatusCode != 400 {
+		t.Errorf("ids non validi: %d, voglio 400", res.StatusCode)
+	}
+	deleteDeck(db, other)
 
 	// export in formato Moxfield
 	res, err = http.Get(srv.URL + "/deck/" + itoa64(id) + "/export")
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := io.ReadAll(res.Body)
+	body, _ = io.ReadAll(res.Body)
 	res.Body.Close()
 	if !strings.Contains(string(body), "1 Sol Ring") {
 		t.Errorf("export = %q", body)
@@ -577,7 +627,7 @@ func TestAuthPassword(t *testing.T) {
 	if res := do("GET", "/deck/x", nil, nil); res.StatusCode != 303 || res.Header.Get("Location") != "/login" {
 		t.Errorf("senza login: %d %q, voglio 303 verso /login", res.StatusCode, res.Header.Get("Location"))
 	}
-	if res := do("POST", "/cards/1/toggle", nil, map[string]string{"HX-Request": "true"}); res.StatusCode != 401 ||
+	if res := do("POST", "/deck/1/purchased", nil, map[string]string{"HX-Request": "true"}); res.StatusCode != 401 ||
 		res.Header.Get("HX-Redirect") != "/login" {
 		t.Errorf("htmx senza login: %d, voglio 401 con HX-Redirect", res.StatusCode)
 	}

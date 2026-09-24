@@ -231,13 +231,20 @@ func deleteCard(db *sql.DB, id int64) (int64, error) {
 
 // togglePurchased inverte il flag lato server: niente stato dal client, niente race
 // se l'utente clicca due volte in fretta.
-func togglePurchased(db *sql.DB, id int64) (int64, error) {
-	var deckID int64
-	if err := db.QueryRow(`SELECT deck_id FROM cards WHERE id = ?`, id).Scan(&deckID); err != nil {
-		return 0, err
+// setPurchased scrive lo stato voluto, non "inverti": due clic ravvicinati o una
+// richiesta ripetuta non possono ribaltare la spunta. deck_id nel WHERE: un id
+// che appartiene a un altro mazzo non viene toccato.
+func setPurchased(db *sql.DB, deckID int64, ids []int64, purchased bool) error {
+	if len(ids) == 0 {
+		return nil
 	}
-	_, err := db.Exec(`UPDATE cards SET purchased = 1 - purchased WHERE id = ?`, id)
-	return deckID, err
+	args := []any{purchased, deckID}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	_, err := db.Exec(`UPDATE cards SET purchased = ? WHERE deck_id = ? AND id IN (?`+
+		strings.Repeat(",?", len(ids)-1)+`)`, args...)
+	return err
 }
 
 func setPrice(db *sql.DB, id int64, price float64) error {

@@ -46,9 +46,9 @@ func routes() *echo.Echo {
 	e.GET("/deck/:id/prints", printsHandler)
 	e.POST("/deck/:id/cards", addCardHandler)
 	e.POST("/deck/:id/prices", refreshPricesHandler)
+	e.POST("/deck/:id/purchased", purchasedHandler)
 	e.GET("/deck/:id/export", exportHandler)
 
-	e.POST("/cards/:id/toggle", toggleHandler)
 	e.DELETE("/cards/:id", deleteCardHandler)
 	return e
 }

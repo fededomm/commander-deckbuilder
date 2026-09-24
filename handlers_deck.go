@@ -90,16 +90,31 @@ func addCardHandler(c echo.Context) error {
 	return renderChecklist(c, id)
 }
 
-func toggleHandler(c echo.Context) error {
-	id, err := pathID(c)
+// purchasedHandler: una carta (la casella della riga) o tante ("seleziona tutte").
+// Risponde solo con contatori e statistiche out-of-band: le caselle sono già
+// giuste nel browser, e ridisegnare le righe cancellava la spunta di una carta
+// cliccata mentre la richiesta precedente era ancora in volo.
+func purchasedHandler(c echo.Context) error {
+	deckID, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	deckID, err := togglePurchased(db, id)
+	var ids []int64
+	for _, s := range strings.Split(c.FormValue("ids"), ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "ids non validi")
+		}
+		ids = append(ids, id)
+	}
+	if err := setPurchased(db, deckID, ids, c.FormValue("purchased") != ""); err != nil {
+		return err
+	}
+	cards, err := deckCards(db, deckID)
 	if err != nil {
 		return err
 	}
-	return renderChecklist(c, deckID)
+	return render(c, purchaseStats(cards))
 }
 
 func deleteCardHandler(c echo.Context) error {

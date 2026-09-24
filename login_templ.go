@@ -71,7 +71,7 @@ func loginPage(wrong bool) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><img class=\"login-logo\" src=\"/static/icon.png\" alt=\"\" width=\"56\" height=\"56\"><h1>Commander Deckbuilder</h1><p class=\"sub\">Questa istanza è privata. Inserisci la password per entrare.</p><label for=\"password\">Password</label><div class=\"login-field\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</div><img class=\"login-logo\" src=\"/static/icon.png\" alt=\"\" width=\"56\" height=\"56\"><h1>Commander Deckbuilder</h1><p class=\"sub\">Questa istanza è privata. Inserisci la password per entrare.</p><label for=\"password\">Password</label><div class=\"icon-field\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
