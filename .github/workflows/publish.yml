@@ -87,7 +87,10 @@ jobs:
           | `…-windows-setup.exe` | Windows — installer per utente singolo, niente amministratore |
           | `…-macos-arm64.dmg` | Mac con Apple Silicon (M1 e successivi) |
           | `…-macos-amd64.dmg` | Mac con processore Intel |
-          | `…-linux-amd64.tar.gz` | Linux — un binario, `tar xzf` e via |
+          | `…-linux-amd64.tar.gz` | Linux su PC (x86-64) — un binario, `tar xzf` e via |
+          | `…-linux-arm64.tar.gz` | Linux su ARM (Raspberry Pi 4/5, server ARM) |
+
+          Su Mac: apri il `.dmg` e trascina l'app su Applicazioni.
 
           Nessuno dei pacchetti è firmato: al primo avvio macOS chiede clic destro → Apri,
           Windows può mostrare l'avviso SmartScreen ("Ulteriori informazioni" → "Esegui comunque").

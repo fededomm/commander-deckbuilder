@@ -2,7 +2,7 @@
 # Costruisce i pacchetti distribuibili in dist/.
 #   windows  installer NSIS per utente singolo (serve makensis)
 #   macos    bundle .app zippato per arm64 e amd64; il .dmg solo se giri su un Mac
-#   linux    binario in un tar.gz
+#   linux    binario in un tar.gz, per amd64 e arm64
 # Senza argomenti li fa tutti:  ./packaging/build.sh [windows] [macos] [linux]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -88,6 +88,12 @@ done
 # resta lo zip. Vedi il README per firma e notarizzazione.
 if [ "$(uname)" = "Darwin" ]; then
   for arch in arm64 amd64; do
+    # Firma ad-hoc del bundle: non è una firma da sviluppatore (Gatekeeper chiede
+    # comunque clic destro → Apri), ma senza, su Apple Silicon un .app scaricato
+    # può risultare "danneggiato" invece che solo "non verificato".
+    codesign --force --deep --sign - "$OUT/macos/$arch/$APPNAME.app"
+    # Il collegamento ad Applicazioni: aperto il .dmg, si trascina l'app lì sopra.
+    ln -sfn /Applications "$OUT/macos/$arch/Applications"
     hdiutil create -volname "$APPNAME" -srcfolder "$OUT/macos/$arch" -ov -format UDZO \
       "$OUT/CommanderDeckbuilder-$VERSION-macos-$arch.dmg"
   done
@@ -96,9 +102,11 @@ fi
 
 # --- Linux -------------------------------------------------------------------
 if want linux; then
-  mkdir -p "$OUT/linux"
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$OUT/linux/deckbuilder"
-  tar -czf "$OUT/CommanderDeckbuilder-$VERSION-linux-amd64.tar.gz" -C "$OUT/linux" deckbuilder
+for arch in amd64 arm64; do
+  mkdir -p "$OUT/linux/$arch"
+  CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -ldflags="-s -w" -o "$OUT/linux/$arch/deckbuilder"
+  tar -czf "$OUT/CommanderDeckbuilder-$VERSION-linux-$arch.tar.gz" -C "$OUT/linux/$arch" deckbuilder
+done
 fi
 
 echo

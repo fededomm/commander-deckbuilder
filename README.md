@@ -90,15 +90,17 @@ Escono in `dist/`:
 | `…-windows-setup.exe` | installer NSIS, ~4 MB |
 | `…-macos-arm64.zip` / `-amd64.zip` | bundle `.app` pronto da trascinare in Applicazioni |
 | `…-macos-*.dmg` | **solo su un Mac** (in CI ci pensa il runner macOS) |
-| `…-linux-amd64.tar.gz` | il binario Linux |
+| `…-linux-amd64.tar.gz` / `-arm64.tar.gz` | il binario Linux, per PC e per ARM (Raspberry Pi) |
 
 Il binario semplice resta un `go build` normale, se ti basta quello.
 
 ### Windows
 
-Installer **per utente singolo**: va in `%LOCALAPPDATA%\Programs`, non chiede
-l'amministratore, mette la voce nel menu Start e in "App installate" con il suo
-disinstallatore. L'eseguibile è compilato `-H windowsgui`, quindi niente finestra
+Installer **per utente singolo**, un wizard classico: benvenuto → cartella →
+componenti (collegamento sul desktop, facoltativo) → installazione → fine, con
+"Avvia" già spuntato. Va in `%LOCALAPPDATA%\Programs`, non chiede
+l'amministratore, mette la voce nel menu Start e in "App installate" (con
+dimensione, autore e link al progetto) insieme al suo disinstallatore. L'eseguibile è compilato `-H windowsgui`, quindi niente finestra
 nera del prompt; in cambio non ha stderr, e scrive `deckbuilder.log` accanto al
 database.
 
@@ -111,7 +113,9 @@ alla domanda esplicita.
 
 Il `.app` si costruisce da Linux (è solo una cartella con `Info.plist`, il
 binario e l'icona), il **`.dmg` no**: vuole `hdiutil`, che esiste solo su macOS.
-Lo script se ne accorge da solo e lo produce se lo lanci lì.
+Lo script se ne accorge da solo e lo produce se lo lanci lì: firma il bundle
+ad-hoc (`codesign -s -`) e mette nel `.dmg` il collegamento ad Applicazioni,
+così l'installazione è il solito trascinamento.
 
 Senza un Apple Developer ID Gatekeeper blocca un `.app` non firmato scaricato dal
 web: clic destro → Apri, una volta sola, oppure
