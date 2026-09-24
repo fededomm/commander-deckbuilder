@@ -219,7 +219,7 @@ templ colorSpread(cards []Card) {
 	{{ stats := colorStats(cards) }}
 	if len(stats) > 0 {
 		<figure class="colors-box">
-			<figcaption>Colori</figcaption>
+			<figcaption>Colori <small>(terre escluse)</small></figcaption>
 			<ul class="colors">
 				for _, s := range stats {
 					<li>

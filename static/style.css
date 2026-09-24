@@ -23,6 +23,7 @@
 	--mana-b: #a996c9;
 	--mana-r: #f0806b;
 	--mana-g: #63c98a;
+	--mana-c: #bdb6c9;     /* incolore: il grigio delle carte artefatto */
 
 	--radius: 10px;
 	--pad: 1.25rem;
@@ -175,6 +176,7 @@ code {
 .pip-B { background: var(--mana-b); }
 .pip-R { background: var(--mana-r); }
 .pip-G { background: var(--mana-g); }
+.pip-C { background: var(--mana-c); }
 
 .progress {
 	display: block;
@@ -350,7 +352,7 @@ code {
 	letter-spacing: .06em;
 	margin-bottom: .5rem;
 }
-.curve-box figcaption small { text-transform: none; letter-spacing: 0; opacity: .8; }
+.curve-box figcaption small, .colors-box figcaption small { text-transform: none; letter-spacing: 0; opacity: .8; }
 
 .curve { display: flex; align-items: flex-end; gap: .3rem; height: 92px; }
 .curve-col {

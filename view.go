@@ -279,18 +279,27 @@ type ColorStat struct {
 }
 
 // colorStats conta le carte per colore; una multicolore conta in ogni suo colore,
-// quindi la somma può superare il numero di carte.
+// quindi la somma può superare il numero di carte. Le carte senza simboli colorati
+// (Sol Ring, i Signet) vanno in "C", incolore. Le terre restano fuori come nella
+// curva: non hanno costo, e contarle tutte come incolori non direbbe niente.
 func colorStats(cards []Card) []ColorStat {
 	counts := map[rune]int{}
 	for _, c := range cards {
-		for _, r := range manaColors(c.ManaCost) {
+		if categorize(c.TypeLine) == "Land" {
+			continue
+		}
+		colors := manaColors(c.ManaCost)
+		if colors == "" {
+			colors = "C"
+		}
+		for _, r := range colors {
 			counts[r] += max(c.Qty, 1)
 		}
 	}
 	var out []ColorStat
-	for _, r := range "WUBRG" {
+	for _, r := range "WUBRGC" {
 		if counts[r] > 0 {
-			out = append(out, ColorStat{Code: string(r), Name: colorNames[r], Qty: counts[r]})
+			out = append(out, ColorStat{Code: string(r), Name: colorName(string(r)), Qty: counts[r]})
 		}
 	}
 	return out

@@ -573,12 +573,16 @@ func TestManaCurveEscludeLeTerre(t *testing.T) {
 func TestColorStatsEDeckColors(t *testing.T) {
 	cards := []Card{
 		{ManaCost: "{1}{U}", Qty: 2},
-		{ManaCost: "{W}{U}", Qty: 1}, // multicolore: conta sia in W sia in U
-		{ManaCost: "{2}", Qty: 5},    // incolore: non conta da nessuna parte
+		{ManaCost: "{W}{U}", Qty: 1},               // multicolore: conta sia in W sia in U
+		{ManaCost: "{2}", Qty: 5},                  // incolore: va in C
+		{TypeLine: "Basic Land — Island", Qty: 30}, // terra: fuori, come nella curva
 	}
 	stats := colorStats(cards)
-	if len(stats) != 2 {
-		t.Fatalf("voglio 2 colori, ho %+v", stats)
+	if len(stats) != 3 {
+		t.Fatalf("voglio W, U e C, ho %+v", stats)
+	}
+	if stats[2].Code != "C" || stats[2].Qty != 5 || stats[2].Name != "Incolore" {
+		t.Errorf("incolore = %+v, voglio C/5", stats[2])
 	}
 	if stats[0].Code != "W" || stats[0].Qty != 1 {
 		t.Errorf("primo colore = %+v, voglio W/1", stats[0])

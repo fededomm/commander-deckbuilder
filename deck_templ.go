@@ -672,7 +672,7 @@ func colorSpread(cards []Card) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		stats := colorStats(cards)
 		if len(stats) > 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<figure class=\"colors-box\"><figcaption>Colori</figcaption><ul class=\"colors\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<figure class=\"colors-box\"><figcaption>Colori <small>(terre escluse)</small></figcaption><ul class=\"colors\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
