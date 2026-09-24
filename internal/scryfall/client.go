@@ -1,13 +1,14 @@
-package main
+// Package scryfall è il client dell'API di Scryfall: ricerca, ristampe, carta
+// singola e /cards/collection. Parla solo il formato di Scryfall; tradurlo nel
+// modello dell'app è compito del servizio.
+package scryfall
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"runtime/debug"
-	"slices"
 	"strconv"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 // Scryfall chiede uno User-Agent identificabile e ~100ms fra le richieste.
 // Dal browser lo faceva il browser, qui tocca a noi. L'URL dev'essere vero:
 // è il recapito con cui Scryfall ci scrive invece di bannarci e basta.
-var userAgent = "commander-deckbuilder/" + buildVersion() +
+var UserAgent = "commander-deckbuilder/" + buildVersion() +
 	" (+https://github.com/fededomm/commander-deckbuilder)"
 
 // buildVersion legge la revisione che il go tool incastona nel binario da sé
@@ -36,14 +37,14 @@ func buildVersion() string {
 	return "dev" // go test e go run non sempre incastonano il VCS
 }
 
-var scryfall = resty.New().
+var client = resty.New().
 	SetBaseURL("https://api.scryfall.com").
-	SetHeader("User-Agent", userAgent).
+	SetHeader("User-Agent", UserAgent).
 	SetHeader("Accept", "application/json"). // Scryfall rifiuta senza, anche in POST
 	SetTimeout(20 * time.Second)
 
 // Su una ricerca senza risultati Scryfall risponde 404: non è un errore da mostrare.
-var errNotFound = errors.New("nessun risultato")
+var ErrNotFound = errors.New("nessun risultato")
 
 // scryError è il corpo che Scryfall manda sugli errori: "details" spiega cosa manca.
 type scryError struct {
@@ -57,7 +58,7 @@ func restErr(res *resty.Response) error {
 	return fmt.Errorf("Scryfall %d", res.StatusCode())
 }
 
-type scryCard struct {
+type Card struct {
 	ID              string            `json:"id"`
 	OracleID        string            `json:"oracle_id"`
 	Name            string            `json:"name"`
@@ -77,8 +78,8 @@ type scryCard struct {
 	} `json:"prices"`
 }
 
-// image: le bifacciali non hanno image_uris in cima, sta nella prima faccia.
-func (c scryCard) image() string {
+// Image: le bifacciali non hanno image_uris in cima, sta nella prima faccia.
+func (c Card) Image() string {
 	if u := c.ImageURIs["normal"]; u != "" {
 		return u
 	}
@@ -88,9 +89,9 @@ func (c scryCard) image() string {
 	return ""
 }
 
-// price: quotazione Cardmarket in EUR, 0 se la carta non è quotata.
+// Price: quotazione Cardmarket in EUR, 0 se la carta non è quotata.
 // Per le foil, se manca eur_foil si ripiega sul prezzo normale.
-func (c scryCard) price(foil bool) float64 {
+func (c Card) Price(foil bool) float64 {
 	p := c.Prices.EUR
 	if foil && c.Prices.EURFoil != nil {
 		p = c.Prices.EURFoil
@@ -102,75 +103,36 @@ func (c scryCard) price(foil bool) float64 {
 	return v
 }
 
-func (c scryCard) toCard(qty int, foil bool) Card {
-	return Card{
-		ScryfallID:      c.ID,
-		Name:            c.Name,
-		TypeLine:        c.TypeLine,
-		ManaCost:        c.ManaCost,
-		Image:           c.image(),
-		PriceEUR:        c.price(foil),
-		Qty:             qty,
-		SetCode:         c.Set,
-		CollectorNumber: c.CollectorNumber,
-		Foil:            foil,
-	}
-}
-
 // cardList è la forma di risposta di /cards/search e /cards/collection.
 type cardList struct {
-	Data []scryCard `json:"data"`
+	Data []Card `json:"data"`
 }
 
 func request(ctx context.Context, result any) *resty.Request {
-	return scryfall.R().SetContext(ctx).SetResult(result).SetError(&scryError{})
+	return client.R().SetContext(ctx).SetResult(result).SetError(&scryError{})
 }
 
 // Quante carte mostrare: oltre non si scorre, si ricerca meglio.
 const maxResults = 30
 
-// scryfallSearch: una riga per carta, la stampa che Scryfall considera principale.
-func scryfallSearch(ctx context.Context, q string) ([]scryCard, error) {
-	cards, err := scryfallQuery(ctx, map[string]string{"unique": "cards", "q": q})
+// Search: una riga per carta, la stampa che Scryfall considera principale.
+func Search(ctx context.Context, q string) ([]Card, error) {
+	cards, err := query(ctx, map[string]string{"unique": "cards", "q": q})
 	return cards[:min(len(cards), maxResults)], err
 }
 
-// scryfallPrints elenca tutte le ristampe di una carta. Le chiedo dalla più
-// recente e le riordino per prezzo: è una lista della spesa, e "order=eur" di
-// Scryfall mette in testa le non quotate, cioè proprio quelle che non si comprano.
-// Qui non taglio: la griglia le impagina tutte.
-func scryfallPrints(ctx context.Context, q string) ([]scryCard, error) {
-	cards, err := scryfallQuery(ctx, map[string]string{
+// Prints elenca tutte le ristampe di una carta, dalla più recente. Qui non taglio:
+// l'ordine per prezzo e la paginazione li decide chi le mostra.
+//
+// ponytail: una pagina sola di Scryfall (175 stampe). Nessuna carta ne ha di più;
+// se un giorno succedesse, qui si segue "next_page".
+func Prints(ctx context.Context, q string) ([]Card, error) {
+	return query(ctx, map[string]string{
 		"unique": "prints", "order": "released", "dir": "desc", "q": q})
-	if err != nil {
-		return nil, err
-	}
-	// ponytail: una pagina sola di Scryfall (175 stampe). Nessuna carta ne ha
-	// di più; se un giorno succedesse, qui si segue "next_page".
-	sortByPrice(cards)
-	return cards, nil
 }
 
-// sortByPrice: le quotate prima, dalla più economica; le altre in coda nell'ordine
-// in cui sono arrivate (dalla più recente). Stabile, così il secondo criterio tiene.
-func sortByPrice(cards []scryCard) {
-	unpriced := func(p float64) int {
-		if p == 0 {
-			return 1
-		}
-		return 0
-	}
-	slices.SortStableFunc(cards, func(a, b scryCard) int {
-		pa, pb := a.price(false), b.price(false)
-		if c := cmp.Compare(unpriced(pa), unpriced(pb)); c != 0 {
-			return c
-		}
-		return cmp.Compare(pa, pb)
-	})
-}
-
-// scryfallQuery: 0 risultati non è un errore, Scryfall risponde 404 su "nessun match".
-func scryfallQuery(ctx context.Context, params map[string]string) ([]scryCard, error) {
+// query: 0 risultati non è un errore, Scryfall risponde 404 su "nessun match".
+func query(ctx context.Context, params map[string]string) ([]Card, error) {
 	var list cardList
 	res, err := request(ctx, &list).
 		SetQueryParams(params).
@@ -187,14 +149,15 @@ func scryfallQuery(ctx context.Context, params map[string]string) ([]scryCard, e
 	return list.Data, nil
 }
 
-func scryfallCard(ctx context.Context, id string) (scryCard, error) {
-	var c scryCard
+// Get legge una stampa dal suo id Scryfall.
+func Get(ctx context.Context, id string) (Card, error) {
+	var c Card
 	res, err := request(ctx, &c).SetPathParam("id", id).Get("/cards/{id}")
 	if err != nil {
 		return c, err
 	}
 	if res.StatusCode() == http.StatusNotFound {
-		return c, errNotFound
+		return c, ErrNotFound
 	}
 	if res.IsError() {
 		return c, restErr(res)
@@ -202,19 +165,19 @@ func scryfallCard(ctx context.Context, id string) (scryCard, error) {
 	return c, nil
 }
 
-// identifier è una riga della richiesta /cards/collection: id, oppure set+numero,
+// Identifier è una riga della richiesta /cards/collection: id, oppure set+numero,
 // oppure solo il nome. I campi vuoti spariscono dal JSON.
-type identifier struct {
+type Identifier struct {
 	ID              string `json:"id,omitempty"`
 	Set             string `json:"set,omitempty"`
 	CollectorNumber string `json:"collector_number,omitempty"`
 	Name            string `json:"name,omitempty"`
 }
 
-// scryfallCollection risolve identificatori in stampe. L'endpoint accetta max 75
+// Collection risolve identificatori in stampe. L'endpoint accetta max 75
 // identifiers per richiesta, quindi spezza in blocchi.
-func scryfallCollection(ctx context.Context, ids []identifier) ([]scryCard, error) {
-	var out []scryCard
+func Collection(ctx context.Context, ids []Identifier) ([]Card, error) {
+	var out []Card
 	for i := 0; i < len(ids); i += 75 {
 		chunk := ids[i:min(i+75, len(ids))]
 		var list cardList
