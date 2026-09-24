@@ -1,35 +1,29 @@
 // Handler della pagina mazzo: ricerca, checklist, prezzi ed export.
-package main
+package web
 
 import (
-	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"commander-deckbuilder/internal/ui"
 )
 
-func deckPageHandler(c echo.Context) error {
+func (s *server) deckPage(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	name, err := deckName(db, id)
-	if err == sql.ErrNoRows {
-		return echo.ErrNotFound
-	}
+	d, cards, err := s.svc.Deck(id)
 	if err != nil {
 		return err
 	}
-	cards, err := deckCards(db, id)
-	if err != nil {
-		return err
-	}
-	return render(c, deckPage(Deck{ID: id, Name: name}, cards))
+	return render(c, ui.DeckPage(d, cards))
 }
 
-func searchHandler(c echo.Context) error {
+func (s *server) search(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
@@ -38,149 +32,103 @@ func searchHandler(c echo.Context) error {
 	if q == "" {
 		return c.NoContent(http.StatusOK) // campo svuotato: risultati vuoti, non un errore
 	}
-	cards, searchErr := scryfallSearch(c.Request().Context(), q)
-	return render(c, searchResults(id, cards, searchErr))
+	prints, searchErr := s.svc.Search(c.Request().Context(), q)
+	return render(c, ui.SearchResults(id, prints, searchErr))
 }
 
-// printsHandler riempie la dialog delle ristampe: una pagina di griglia per volta.
+// prints riempie la dialog delle ristampe: una pagina di griglia per volta.
 // L'utente sceglie l'espansione invece di prendersi quella principale.
-func printsHandler(c echo.Context) error {
+func (s *server) prints(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	// oracle_id identifica la carta a prescindere dalla stampa; manca solo sulle
-	// pochissime "reversible", per quelle ripiego sul nome esatto.
-	name := c.QueryParam("name")
-	q := c.QueryParam("oracle")
-	if q != "" {
-		q = "oracleid:" + q
-	} else if name != "" {
-		q = `!"` + strings.ReplaceAll(name, `"`, "") + `"`
-	} else {
+	oracle, name := c.QueryParam("oracle"), c.QueryParam("name")
+	if oracle == "" && name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "serve oracle o name")
 	}
-	query := c.Request().URL.Query()
 	num, _ := strconv.Atoi(c.QueryParam("page"))
-
-	cards, searchErr := scryfallPrints(c.Request().Context(), q)
-	if len(cards) > 0 {
-		name = cards[0].Name // il nome vero, anche quando ho cercato per oracle_id
-	}
 	// ponytail: ogni cambio pagina richiede di nuovo l'elenco a Scryfall invece
-	// di tenerlo in una cache. App locale, una carta ha ~150 stampe: la pagina
-	// arriva in un colpo solo. Se pesasse, qui va una cache per oracle_id.
-	return render(c, printsDialog(id, name, paginate(cards, num), query, searchErr))
+	// di tenerlo in una cache. Una carta ha ~150 stampe: la pagina arriva in un
+	// colpo solo. Se pesasse, nel servizio va una cache per oracle_id.
+	prints, searchErr := s.svc.Prints(c.Request().Context(), oracle, name)
+	if len(prints) > 0 {
+		name = prints[0].Name // il nome vero, anche quando ho cercato per oracle_id
+	}
+	return render(c, ui.PrintsDialog(id, name, ui.Paginate(prints, num), c.Request().URL.Query(), searchErr))
 }
 
-func addCardHandler(c echo.Context) error {
+func (s *server) addCard(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	// Il client manda solo l'id: la carta la rileggo da Scryfall, così non ho
-	// prezzi e immagini che rimbalzano avanti e indietro negli attributi HTML.
-	card, err := scryfallCard(c.Request().Context(), c.FormValue("scryfall_id"))
-	if err != nil {
+	if err := s.svc.AddCard(c.Request().Context(), id, c.FormValue("scryfall_id")); err != nil {
 		return err
 	}
-	if err := insertCards(db, id, []Card{card.toCard(1, false)}); err != nil {
-		return err
-	}
-	return renderChecklist(c, id)
+	return s.renderChecklist(c, id)
 }
 
-// purchasedHandler: una carta (la casella della riga) o tante ("seleziona tutte").
+// purchased: una carta (la casella della riga) o tante ("seleziona tutte").
 // Risponde solo con contatori e statistiche out-of-band: le caselle sono già
 // giuste nel browser, e ridisegnare le righe cancellava la spunta di una carta
 // cliccata mentre la richiesta precedente era ancora in volo.
-func purchasedHandler(c echo.Context) error {
+func (s *server) purchased(c echo.Context) error {
 	deckID, err := pathID(c)
 	if err != nil {
 		return err
 	}
 	var ids []int64
-	for _, s := range strings.Split(c.FormValue("ids"), ",") {
-		id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	for _, v := range strings.Split(c.FormValue("ids"), ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "ids non validi")
 		}
 		ids = append(ids, id)
 	}
-	if err := setPurchased(db, deckID, ids, c.FormValue("purchased") != ""); err != nil {
+	if err := s.svc.SetPurchased(deckID, ids, c.FormValue("purchased") != ""); err != nil {
 		return err
 	}
-	cards, err := deckCards(db, deckID)
+	cards, err := s.svc.Cards(deckID)
 	if err != nil {
 		return err
 	}
-	return render(c, purchaseStats(cards))
+	return render(c, ui.PurchaseStats(cards))
 }
 
-func deleteCardHandler(c echo.Context) error {
+func (s *server) deleteCard(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	deckID, err := deleteCard(db, id)
+	deckID, err := s.svc.DeleteCard(id)
 	if err != nil {
 		return err
 	}
-	return renderChecklist(c, deckID)
+	return s.renderChecklist(c, deckID)
 }
 
-// refreshPricesHandler riallinea i prezzi a Scryfall in un colpo solo.
-func refreshPricesHandler(c echo.Context) error {
+func (s *server) refreshPrices(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	cards, err := deckCards(db, id)
-	if err != nil {
+	if err := s.svc.RefreshPrices(c.Request().Context(), id); err != nil {
 		return err
 	}
-	ids := make([]identifier, len(cards))
-	for i, card := range cards {
-		ids[i] = identifier{ID: card.ScryfallID}
-	}
-	fresh, err := scryfallCollection(c.Request().Context(), ids)
-	if err != nil {
-		return err
-	}
-	byID := make(map[string]scryCard, len(fresh))
-	for _, card := range fresh {
-		byID[card.ID] = card
-	}
-	for _, card := range cards {
-		// il prezzo segue la stampa salvata, foil compreso: è quella che l'utente ha scelto
-		if f, ok := byID[card.ScryfallID]; ok {
-			if p := f.price(card.Foil); p != card.PriceEUR {
-				if err := setPrice(db, card.ID, p); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return renderChecklist(c, id)
+	return s.renderChecklist(c, id)
 }
 
-func exportHandler(c echo.Context) error {
+func (s *server) export(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	name, err := deckName(db, id)
-	if err == sql.ErrNoRows {
-		return echo.ErrNotFound
-	}
-	if err != nil {
-		return err
-	}
-	cards, err := deckCards(db, id)
+	name, list, err := s.svc.Export(id)
 	if err != nil {
 		return err
 	}
 	c.Response().Header().Set(echo.HeaderContentDisposition,
 		`attachment; filename="`+safeFilename(name)+`.txt"`)
-	return c.String(http.StatusOK, toMoxfield(cards))
+	return c.String(http.StatusOK, list)
 }

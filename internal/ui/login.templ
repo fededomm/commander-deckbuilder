@@ -1,8 +1,8 @@
-package main
+package ui
 
-// loginPage: form classico, niente htmx — dopo il login serve una pagina intera
+// LoginPage: form classico, niente htmx — dopo il login serve una pagina intera
 // nuova, e un POST normale con redirect 303 fa esattamente quello.
-templ loginPage(wrong bool) {
+templ LoginPage(wrong bool) {
 	@layout("Accedi · Commander Deckbuilder") {
 		<main class="login">
 			<form class="login-card" method="post" action="/login">

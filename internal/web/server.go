@@ -1,55 +1,72 @@
-package main
+// Package web è il livello HTTP: rotte, handler, login e ciclo di vita del
+// processo. Un handler legge l'input dalla richiesta, chiama il servizio e
+// rende un componente di ui: niente SQL, niente chiamate a Scryfall, niente HTML
+// scritto a mano.
+package web
 
 import (
+	"errors"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/a-h/templ"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+
+	"commander-deckbuilder/internal/deck"
+	"commander-deckbuilder/internal/service"
+	"commander-deckbuilder/internal/ui"
 )
 
-func routes() *echo.Echo {
+type server struct {
+	svc *service.Service
+}
+
+// New monta le rotte. password non vuota (AUTH_PASSWORD, online) attiva il login;
+// vuota, l'app resta aperta come in locale.
+func New(svc *service.Service, password string) *echo.Echo {
+	s := &server{svc: svc}
 	e := echo.New()
 	e.HideBanner, e.HidePort = true, true
 	e.Use(middleware.Recover()) // un panic in un handler non deve buttare giù l'app
 
-	// Online (Render) l'app è pubblica: con AUTH_PASSWORD impostata serve il
-	// login. In locale la variabile non c'è e l'app resta aperta.
-	if pw := os.Getenv("AUTH_PASSWORD"); pw != "" {
-		e.Use(requireAuth(pw))
-		e.Match([]string{http.MethodGet, http.MethodPost}, "/login", loginHandler(pw))
+	if password != "" {
+		e.Use(requireAuth(password))
+		e.Match([]string{http.MethodGet, http.MethodPost}, "/login", loginHandler(password))
 	}
 
 	// Un errore che esce da un handler diventa 500 e finisce nel log; per gli altri
 	// codici gli handler usano echo.ErrNotFound & co., che non vanno loggati.
+	// deck.ErrNotFound arriva dallo store per un id che non esiste: è un 404.
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		if errors.Is(err, deck.ErrNotFound) {
+			err = echo.ErrNotFound
+		}
 		if _, ok := err.(*echo.HTTPError); !ok {
 			log.Printf("errore: %v", err)
 		}
 		e.DefaultHTTPErrorHandler(err, c)
 	}
 
-	e.StaticFS("/static", echo.MustSubFS(staticFS, "static"))
+	e.StaticFS("/static", echo.MustSubFS(ui.Static, "static"))
 
-	e.GET("/", home)
-	e.POST("/decks", createDeckHandler)
-	e.DELETE("/decks/:id", deleteDeckHandler)
-	e.POST("/import", importHandler)
+	e.GET("/", s.home)
+	e.POST("/decks", s.createDeck)
+	e.DELETE("/decks/:id", s.deleteDeck)
+	e.POST("/import", s.importDeck)
 	e.GET("/alive", aliveHandler) // resta aperta finché la pagina è aperta
 
-	e.GET("/deck/:id", deckPageHandler)
-	e.GET("/deck/:id/search", searchHandler)
-	e.GET("/deck/:id/prints", printsHandler)
-	e.POST("/deck/:id/cards", addCardHandler)
-	e.POST("/deck/:id/prices", refreshPricesHandler)
-	e.POST("/deck/:id/purchased", purchasedHandler)
-	e.GET("/deck/:id/export", exportHandler)
+	e.GET("/deck/:id", s.deckPage)
+	e.GET("/deck/:id/search", s.search)
+	e.GET("/deck/:id/prints", s.prints)
+	e.POST("/deck/:id/cards", s.addCard)
+	e.POST("/deck/:id/prices", s.refreshPrices)
+	e.POST("/deck/:id/purchased", s.purchased)
+	e.GET("/deck/:id/export", s.export)
 
-	e.DELETE("/cards/:id", deleteCardHandler)
+	e.DELETE("/cards/:id", s.deleteCard)
 	return e
 }
 
@@ -59,16 +76,12 @@ func render(c echo.Context, comp templ.Component) error {
 	return comp.Render(c.Request().Context(), c.Response())
 }
 
-func renderChecklist(c echo.Context, deckID int64) error {
-	name, err := deckName(db, deckID)
+func (s *server) renderChecklist(c echo.Context, deckID int64) error {
+	d, cards, err := s.svc.Deck(deckID)
 	if err != nil {
 		return err
 	}
-	cards, err := deckCards(db, deckID)
-	if err != nil {
-		return err
-	}
-	return render(c, checklist(Deck{ID: deckID, Name: name}, cards))
+	return render(c, ui.Checklist(d, cards))
 }
 
 func pathID(c echo.Context) (int64, error) {

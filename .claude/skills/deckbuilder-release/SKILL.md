@@ -57,7 +57,7 @@ docker build -t cdb . && docker run -p 10000:10000 -v cdb-data:/data cdb
   auto-deploy a ogni push): il disco del container sparisce a ogni spin-down, per
   questo il DB è su Turso (`DB_URL`, `TURSO_AUTH_TOKEN`). Senza `DB_URL` la `CMD`
   ripiega su `/data/data.db`, che ha senso solo con un Disk (piano a pagamento).
-- Accesso: `AUTH_PASSWORD` attiva la pagina di login (`auth.go`, cookie firmato).
+- Accesso: `AUTH_PASSWORD` attiva la pagina di login (`internal/web/auth.go`, cookie firmato).
   Le variabili si cambiano dall'MCP di Render o dalla dashboard.
 - Docker non è installato in questa WSL: verifica con `CGO_ENABLED=0 go build` e
   lanciando il binario con gli stessi flag della `CMD`.

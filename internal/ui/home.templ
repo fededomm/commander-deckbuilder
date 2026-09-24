@@ -1,6 +1,8 @@
-package main
+package ui
 
-templ homePage(decks []Deck) {
+import "commander-deckbuilder/internal/deck"
+
+templ HomePage(decks []deck.Deck) {
 	@layout("Commander Deckbuilder") {
 		<main class="home">
 			<header class="home-head">
@@ -36,13 +38,13 @@ templ homePage(decks []Deck) {
 				</form>
 			</details>
 			<div id="list">
-				@deckList(decks)
+				@DeckList(decks)
 			</div>
 		</main>
 	}
 }
 
-templ deckList(decks []Deck) {
+templ DeckList(decks []deck.Deck) {
 	if len(decks) == 0 {
 		<p class="empty-state">
 			<strong>Nessun mazzo, per ora.</strong>
@@ -94,7 +96,7 @@ templ deckList(decks []Deck) {
 }
 
 // Esito dell'import: quante righe sono entrate e, soprattutto, quali no.
-templ importResult(deckID int64, imported, total int, lost []string) {
+templ ImportResult(deckID int64, imported, total int, lost []string) {
 	if len(lost) > 0 {
 		<span>
 			Importate { itoa(imported) } righe su { itoa(total) }. Non riconosciute:
@@ -106,7 +108,7 @@ templ importResult(deckID int64, imported, total int, lost []string) {
 	}
 }
 
-templ importError(msg string) {
+templ ImportError(msg string) {
 	// un import fallito deve leggersi come fallito, non come una nota qualsiasi
 	<span class="error">Import fallito: { msg }</span>
 }

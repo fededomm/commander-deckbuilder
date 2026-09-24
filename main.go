@@ -1,10 +1,11 @@
 // Commander Deckbuilder: un binario solo. Serve l'interfaccia su localhost,
 // apre il browser e tiene tutto in uno SQLite nella cartella dati dell'utente.
+//
+// main assembla i pezzi e basta: flag, database (internal/store), servizi
+// (internal/service), server HTTP (internal/web). La logica sta in internal/.
 package main
 
 import (
-	"database/sql"
-	"embed"
 	"flag"
 	"fmt"
 	"log"
@@ -17,14 +18,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"commander-deckbuilder/internal/service"
+	"commander-deckbuilder/internal/store"
+	"commander-deckbuilder/internal/web"
 )
 
 //go:generate go tool templ generate
-
-//go:embed static
-var staticFS embed.FS
-
-var db *sql.DB
 
 func main() {
 	noBrowser := flag.Bool("no-browser", false, "non aprire il browser all'avvio")
@@ -42,11 +42,11 @@ func main() {
 		}
 		logToFile(dataDir)
 	}
-	var err error
-	if db, err = openDB(*dbPath); err != nil {
+	st, err := store.Open(*dbPath)
+	if err != nil {
 		log.Fatalf("database %s: %v", *dbPath, err)
 	}
-	defer db.Close()
+	defer st.Close()
 
 	ln, err := listen(*host, *port)
 	if err != nil {
@@ -58,9 +58,10 @@ func main() {
 		openBrowser(url)
 	}
 	if *idleQuit > 0 {
-		go watchIdle(*idleQuit)
+		go web.WatchIdle(*idleQuit, func() { st.Close() })
 	}
-	log.Fatal(http.Serve(ln, routes()))
+	// Online (Render) l'app è pubblica: AUTH_PASSWORD attiva la pagina di login.
+	log.Fatal(http.Serve(ln, web.New(service.New(st), os.Getenv("AUTH_PASSWORD"))))
 }
 
 // logToFile: l'installer Windows avvia il binario senza console (-H windowsgui)

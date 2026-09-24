@@ -1,4 +1,6 @@
-package main
+package ui
+
+import "commander-deckbuilder/internal/deck"
 
 templ layout(title string) {
 	<!DOCTYPE html>
@@ -44,7 +46,7 @@ templ legal() {
 // così non resta un buco nel layout.
 templ pips(colors string) {
 	if colors != "" {
-		<span class="pips" title={ colorName(colors) } aria-label={ "Colori: " + colorName(colors) } role="img">
+		<span class="pips" title={ deck.ColorName(colors) } aria-label={ "Colori: " + deck.ColorName(colors) } role="img">
 			for _, c := range colors {
 				<span class={ "pip", "pip-" + string(c) }></span>
 			}

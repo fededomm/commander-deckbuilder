@@ -1,4 +1,4 @@
-package main
+package web
 
 import (
 	"crypto/hmac"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+
+	"commander-deckbuilder/internal/ui"
 )
 
 // Password unica, niente utenti: l'app online la usa solo il proprietario.
@@ -50,10 +52,10 @@ func requireAuth(pw string) echo.MiddlewareFunc {
 func loginHandler(pw string) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if c.Request().Method == http.MethodGet {
-			return render(c, loginPage(false))
+			return render(c, ui.LoginPage(false))
 		}
 		if subtle.ConstantTimeCompare([]byte(c.FormValue("password")), []byte(pw)) != 1 {
-			return render(c, loginPage(true))
+			return render(c, ui.LoginPage(true))
 		}
 		c.SetCookie(&http.Cookie{
 			Name:     authCookie,

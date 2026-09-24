@@ -1,5 +1,5 @@
 // Handler della home: elenco mazzi, creazione, cancellazione e import Moxfield.
-package main
+package web
 
 import (
 	"net/http"
@@ -7,22 +7,24 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"commander-deckbuilder/internal/ui"
 )
 
-func home(c echo.Context) error {
-	decks, err := listDecks(db)
+func (s *server) home(c echo.Context) error {
+	decks, err := s.svc.Decks()
 	if err != nil {
 		return err
 	}
-	return render(c, homePage(decks))
+	return render(c, ui.HomePage(decks))
 }
 
-func createDeckHandler(c echo.Context) error {
+func (s *server) createDeck(c echo.Context) error {
 	name := strings.TrimSpace(c.FormValue("name"))
 	if name == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "nome obbligatorio")
 	}
-	id, err := createDeck(db, name)
+	id, err := s.svc.CreateDeck(name)
 	if err != nil {
 		return err
 	}
@@ -30,48 +32,34 @@ func createDeckHandler(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func deleteDeckHandler(c echo.Context) error {
+func (s *server) deleteDeck(c echo.Context) error {
 	id, err := pathID(c)
 	if err != nil {
 		return err
 	}
-	if err := deleteDeck(db, id); err != nil { // le carte seguono via ON DELETE CASCADE
+	if err := s.svc.DeleteDeck(id); err != nil {
 		return err
 	}
-	decks, err := listDecks(db)
+	decks, err := s.svc.Decks()
 	if err != nil {
 		return err
 	}
-	return render(c, deckList(decks))
+	return render(c, ui.DeckList(decks))
 }
 
-func importHandler(c echo.Context) error {
-	name := strings.TrimSpace(c.FormValue("name"))
-	lines, skipped := parseMoxfield(c.FormValue("list"))
-	if len(lines) == 0 {
-		return render(c, importError("nessuna riga riconosciuta"))
-	}
-	rows, missing, err := resolvePrintings(c.Request().Context(), lines)
-	if err != nil {
-		return render(c, importError(err.Error()))
-	}
-	if len(rows) == 0 {
-		return render(c, importError("nessuna carta risolta"))
-	}
-	id, err := createDeck(db, name)
+func (s *server) importDeck(c echo.Context) error {
+	res, err := s.svc.Import(c.Request().Context(),
+		strings.TrimSpace(c.FormValue("name")), c.FormValue("list"))
 	if err != nil {
 		return err
 	}
-	if err := insertCards(db, id, rows); err != nil {
-		return err
+	if res.Problem != "" {
+		return render(c, ui.ImportError(res.Problem))
 	}
-	// se qualcosa non è stato importato l'utente deve saperlo prima di andarsene
-	lost := skipped
-	for _, m := range missing {
-		lost = append(lost, m.Name)
+	// tutto importato: si va dritti al mazzo; altrimenti resta il riepilogo
+	// con le righe perse, che l'utente deve vedere prima di andarsene
+	if len(res.Lost) == 0 {
+		c.Response().Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(res.DeckID, 10))
 	}
-	if len(lost) == 0 {
-		c.Response().Header().Set("HX-Redirect", "/deck/"+strconv.FormatInt(id, 10))
-	}
-	return render(c, importResult(id, len(rows), len(lines), lost))
+	return render(c, ui.ImportResult(res.DeckID, res.Imported, res.Lines, res.Lost))
 }

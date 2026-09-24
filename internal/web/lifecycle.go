@@ -1,5 +1,5 @@
 // Avvio e spegnimento: l'app si ferma quando non ha più finestre aperte.
-package main
+package web
 
 import (
 	"log"
@@ -29,14 +29,14 @@ func aliveHandler(c echo.Context) error {
 	return nil
 }
 
-// watchIdle spegne il server quando l'ultima finestra è chiusa da `grace`.
+// WatchIdle spegne il server quando l'ultima finestra è chiusa da `grace`.
 // L'attesa serve a non morire mentre si passa dalla home a un mazzo: fra le due
 // pagine la connessione cade e si riapre.
 //
 // ponytail: un giro al secondo invece di timer da annullare a ogni connessione.
 // Se il browser scarta la scheda in background l'app esce lo stesso: alzare
 // -idle-quit, o passare a un timer vero se dà fastidio.
-func watchIdle(grace time.Duration) {
+func WatchIdle(grace time.Duration, onExit func()) {
 	var seen bool
 	var idle time.Duration
 	for range time.Tick(time.Second) {
@@ -49,7 +49,7 @@ func watchIdle(grace time.Duration) {
 		}
 		if idle += time.Second; idle >= grace {
 			log.Printf("nessuna finestra aperta da %s, esco", grace)
-			db.Close() // SQLite è già durevole dopo il COMMIT, questo chiude il file pulito
+			onExit()
 			os.Exit(0)
 		}
 	}

@@ -1,39 +1,23 @@
-package main
+// Package store è la persistenza: schema, migrazioni e query. SQLite in un file
+// locale per l'app desktop, Turso (libsql) per il deploy. SQL inline, niente ORM:
+// ogni metodo è una query o poco più, e restituisce i tipi di deck.
+package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
 	_ "modernc.org/sqlite"
+
+	"commander-deckbuilder/internal/deck"
 )
 
-type Deck struct {
-	ID        int64
-	Name      string
-	Cards     int     // somma delle qty
-	Purchased int     // somma delle qty già acquistate
-	Total     float64 // valore del mazzo
-	Todo      float64 // quanto resta da comprare
-	Colors    string  // colori dei costi di mana, in ordine WUBRG, es. "WUB"
-}
-
-type Card struct {
-	ID              int64
-	DeckID          int64
-	ScryfallID      string
-	Name            string
-	TypeLine        string
-	ManaCost        string
-	Image           string
-	PriceEUR        float64
-	Purchased       bool
-	Qty             int
-	SetCode         string
-	CollectorNumber string
-	Foil            bool
+type Store struct {
+	db *sql.DB
 }
 
 const schema = `
@@ -59,10 +43,10 @@ CREATE TABLE IF NOT EXISTS cards (
   UNIQUE (deck_id, scryfall_id)
 );`
 
-// openDB: un percorso è un file SQLite locale; un URL libsql:// è Turso (deploy
+// Open: un percorso è un file SQLite locale; un URL libsql:// è Turso (deploy
 // su Render free, dove il disco del container sparisce a ogni spin-down).
 // Il token di Turso arriva da TURSO_AUTH_TOKEN, mai dal flag: finirebbe nei log.
-func openDB(path string) (*sql.DB, error) {
+func Open(path string) (*Store, error) {
 	driver, dsn := "sqlite", "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
 	if strings.HasPrefix(path, "libsql://") {
 		driver, dsn = "libsql", path+"?authToken="+os.Getenv("TURSO_AUTH_TOKEN")
@@ -77,10 +61,26 @@ func openDB(path string) (*sql.DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
-	return db, migrate(db)
+	if err := migrate(db); err != nil {
+		return nil, err
+	}
+	return &Store{db: db}, nil
 }
 
 // DB creati prima dell'import Moxfield: aggiungo le colonne mancanti.
+// Close chiude il database: SQLite è già durevole dopo il COMMIT, questo chiude
+// il file pulito.
+func (s *Store) Close() error { return s.db.Close() }
+
+// notFound traduce "nessuna riga" nell'errore del modello: chi sta sopra lo store
+// non deve sapere che sotto c'è database/sql.
+func notFound(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return deck.ErrNotFound
+	}
+	return err
+}
+
 func migrate(db *sql.DB) error {
 	rows, err := db.Query(`PRAGMA table_info(cards)`)
 	if err != nil {
@@ -118,8 +118,8 @@ func migrate(db *sql.DB) error {
 	return nil
 }
 
-func listDecks(db *sql.DB) ([]Deck, error) {
-	rows, err := db.Query(`
+func (s *Store) ListDecks() ([]deck.Deck, error) {
+	rows, err := s.db.Query(`
 		SELECT d.id, d.name,
 		       COALESCE(SUM(c.qty), 0),
 		       COALESCE(SUM(c.qty * c.purchased), 0),
@@ -132,35 +132,35 @@ func listDecks(db *sql.DB) ([]Deck, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Deck
+	var out []deck.Deck
 	for rows.Next() {
-		var d Deck
+		var d deck.Deck
 		var costs string // i costi di tutte le carte, concatenati: li riduco a WUBRG
 		if err := rows.Scan(&d.ID, &d.Name, &d.Cards, &d.Purchased, &d.Total, &d.Todo, &costs); err != nil {
 			return nil, err
 		}
-		d.Colors = manaColors(costs)
+		d.Colors = deck.ManaColors(costs)
 		out = append(out, d)
 	}
 	return out, rows.Err()
 }
 
-func createDeck(db *sql.DB, name string) (int64, error) {
-	res, err := db.Exec(`INSERT INTO decks (name) VALUES (?)`, name)
+func (s *Store) CreateDeck(name string) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO decks (name) VALUES (?)`, name)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
 }
 
-func deckName(db *sql.DB, id int64) (string, error) {
+func (s *Store) DeckName(id int64) (string, error) {
 	var name string
-	err := db.QueryRow(`SELECT name FROM decks WHERE id = ?`, id).Scan(&name)
-	return name, err
+	err := s.db.QueryRow(`SELECT name FROM decks WHERE id = ?`, id).Scan(&name)
+	return name, notFound(err)
 }
 
-func deckCards(db *sql.DB, id int64) ([]Card, error) {
-	rows, err := db.Query(`
+func (s *Store) DeckCards(id int64) ([]deck.Card, error) {
+	rows, err := s.db.Query(`
 		SELECT id, deck_id, scryfall_id, name, type_line, mana_cost, image,
 		       price_eur, purchased, qty, set_code, collector_number, foil
 		FROM cards WHERE deck_id = ? ORDER BY name`, id)
@@ -168,9 +168,9 @@ func deckCards(db *sql.DB, id int64) ([]Card, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Card
+	var out []deck.Card
 	for rows.Next() {
-		var c Card
+		var c deck.Card
 		if err := rows.Scan(&c.ID, &c.DeckID, &c.ScryfallID, &c.Name, &c.TypeLine, &c.ManaCost,
 			&c.Image, &c.PriceEUR, &c.Purchased, &c.Qty, &c.SetCode, &c.CollectorNumber, &c.Foil); err != nil {
 			return nil, err
@@ -182,8 +182,8 @@ func deckCards(db *sql.DB, id int64) ([]Card, error) {
 
 // insertCards è transazionale: l'import Moxfield o entra tutto o niente.
 // Un doppione non è un errore, l'utente ha semplicemente ricliccato.
-func insertCards(db *sql.DB, deckID int64, cards []Card) error {
-	tx, err := db.Begin()
+func (s *Store) InsertCards(deckID int64, cards []deck.Card) error {
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
@@ -212,29 +212,27 @@ func insertCards(db *sql.DB, deckID int64, cards []Card) error {
 
 // Le carte le cancello a mano: su Turso via HTTP il PRAGMA foreign_keys non
 // sopravvive tra una richiesta e l'altra, quindi il CASCADE non è garantito.
-func deleteDeck(db *sql.DB, id int64) error {
-	if _, err := db.Exec(`DELETE FROM cards WHERE deck_id = ?`, id); err != nil {
+func (s *Store) DeleteDeck(id int64) error {
+	if _, err := s.db.Exec(`DELETE FROM cards WHERE deck_id = ?`, id); err != nil {
 		return err
 	}
-	_, err := db.Exec(`DELETE FROM decks WHERE id = ?`, id)
+	_, err := s.db.Exec(`DELETE FROM decks WHERE id = ?`, id)
 	return err
 }
 
-func deleteCard(db *sql.DB, id int64) (int64, error) {
+func (s *Store) DeleteCard(id int64) (int64, error) {
 	var deckID int64
-	if err := db.QueryRow(`SELECT deck_id FROM cards WHERE id = ?`, id).Scan(&deckID); err != nil {
-		return 0, err
+	if err := s.db.QueryRow(`SELECT deck_id FROM cards WHERE id = ?`, id).Scan(&deckID); err != nil {
+		return 0, notFound(err)
 	}
-	_, err := db.Exec(`DELETE FROM cards WHERE id = ?`, id)
+	_, err := s.db.Exec(`DELETE FROM cards WHERE id = ?`, id)
 	return deckID, err
 }
 
-// togglePurchased inverte il flag lato server: niente stato dal client, niente race
-// se l'utente clicca due volte in fretta.
 // setPurchased scrive lo stato voluto, non "inverti": due clic ravvicinati o una
 // richiesta ripetuta non possono ribaltare la spunta. deck_id nel WHERE: un id
 // che appartiene a un altro mazzo non viene toccato.
-func setPurchased(db *sql.DB, deckID int64, ids []int64, purchased bool) error {
+func (s *Store) SetPurchased(deckID int64, ids []int64, purchased bool) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -242,12 +240,12 @@ func setPurchased(db *sql.DB, deckID int64, ids []int64, purchased bool) error {
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	_, err := db.Exec(`UPDATE cards SET purchased = ? WHERE deck_id = ? AND id IN (?`+
+	_, err := s.db.Exec(`UPDATE cards SET purchased = ? WHERE deck_id = ? AND id IN (?`+
 		strings.Repeat(",?", len(ids)-1)+`)`, args...)
 	return err
 }
 
-func setPrice(db *sql.DB, id int64, price float64) error {
-	_, err := db.Exec(`UPDATE cards SET price_eur = ? WHERE id = ?`, price, id)
+func (s *Store) SetPrice(id int64, price float64) error {
+	_, err := s.db.Exec(`UPDATE cards SET price_eur = ? WHERE id = ?`, price, id)
 	return err
 }

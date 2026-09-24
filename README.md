@@ -16,18 +16,23 @@ Flag: `-port` (0 = una libera qualsiasi), `-db` (percorso del file SQLite, o URL
 
 Online: con `AUTH_PASSWORD` impostata ogni pagina passa da `/login` (cookie firmato, 90 giorni). Senza, l'app resta aperta come in locale.
 
-- `main.go` — avvio: flag, scelta del DB, porta, apertura del browser
-- `lifecycle.go` — `/alive`, spegnimento a finestre chiuse
-- `auth.go` — login con password unica, solo se c'è `AUTH_PASSWORD`
-- `routes.go` — le rotte echo, l'error handler e gli helper condivisi
-- `handlers_home.go` — elenco mazzi, creazione, cancellazione, import Moxfield
-- `handlers_deck.go` — pagina mazzo: ricerca, checklist, prezzi, export
-- `db.go` — schema SQLite e query
-- `scryfall.go` — client resty: ricerca, batch `/cards/collection`, prezzi e immagini
-- `moxfield.go` — parser ed export del formato Moxfield
-- `view.go` — categorie, totali, formato euro, simboli di mana
-- `*.templ` — le pagine; i `*_templ.go` accanto sono generati, non si modificano
-- `static/` — CSS, htmx, SVG dei simboli: finiscono **dentro** il binario con `go:embed`
+### Come è diviso il codice
+
+Un pacchetto per livello, in `internal/`. Le dipendenze vanno in un verso solo:
+`web → service → store → deck`, `service → scryfall`, `web → ui → deck`. Nessun
+pacchetto importa un livello sopra il suo; `deck` e `scryfall` non importano
+nessuno. Per controllarlo: `go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./internal/...`
+
+| cartella | livello | cosa c'è |
+|---|---|---|
+| `main.go` | avvio | flag, scelta del DB, porta, browser: assembla i pezzi e basta |
+| `internal/web/` | HTTP | rotte echo, handler (input → servizio → componente ui), login (`auth.go`), `/alive` e spegnimento (`lifecycle.go`) |
+| `internal/service/` | servizi | i casi d'uso: import Moxfield, aggiunta carte, prezzi, export. Unico punto che mette insieme store e Scryfall, e che traduce il formato Scryfall nel modello (`convert.go`) |
+| `internal/deck/` | business logic | il modello (`Deck`, `Card`, `Print`) e le regole: categorie, totali, curva, colori, parser/export Moxfield. Niente I/O |
+| `internal/store/` | persistenza | schema, migrazioni e query su SQLite / Turso. Restituisce tipi di `deck`, `deck.ErrNotFound` per un id che non c'è |
+| `internal/scryfall/` | servizio esterno | client resty dell'API Scryfall. Conosce solo il formato di Scryfall |
+| `internal/ui/` | interfaccia | `*.templ` (i `*_templ.go` accanto sono generati, non si modificano), formattazione (`format.go`), `static/` con CSS, JS, htmx e SVG dei simboli — **dentro** il binario con `go:embed` |
+
 - `packaging/` — icone, script NSIS e `build.sh` che produce i pacchetti
 - `.github/workflows/publish.yml` — build e release su tag
 

@@ -1,7 +1,6 @@
-package main
+package deck
 
 import (
-	"context"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,9 +18,9 @@ type MoxfieldLine struct {
 // "1 Sol Ring (EOC) 57 *F*" — set e numero opzionali, i flag in coda possono essere più d'uno.
 var moxfield = regexp.MustCompile(`^\s*(\d+)x?\s+(.+?)(?:\s+\(([\w-]+)\)\s+(\S+))?((?:\s+\*\w+\*)*)\s*$`)
 
-// parseMoxfield ignora righe vuote e commenti; restituisce a parte le righe non
+// ParseMoxfield ignora righe vuote e commenti; restituisce a parte le righe non
 // riconosciute (intestazioni tipo "Deck" o "Sideboard") così l'utente le vede.
-func parseMoxfield(text string) (cards []MoxfieldLine, skipped []string) {
+func ParseMoxfield(text string) (cards []MoxfieldLine, skipped []string) {
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimRight(line, "\r")
 		t := strings.TrimSpace(line)
@@ -45,7 +44,7 @@ func parseMoxfield(text string) (cards []MoxfieldLine, skipped []string) {
 	return cards, skipped
 }
 
-func toMoxfield(cards []Card) string {
+func ToMoxfield(cards []Card) string {
 	var b strings.Builder
 	for _, c := range cards {
 		// Scryfall usa "A // B" per le bifacciali, Moxfield "A / B"
@@ -61,59 +60,4 @@ func toMoxfield(cards []Card) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
-}
-
-// identifiers: se ho set e numero uso quelli (è la stampa esatta), altrimenti il nome.
-func (l MoxfieldLine) identifier() identifier {
-	if l.SetCode != "" {
-		return identifier{Set: l.SetCode, CollectorNumber: l.CollectorNumber}
-	}
-	return identifier{Name: l.Name}
-}
-
-// resolvePrintings mappa le righe Moxfield sulle stampe Scryfall.
-// missing sono le righe che Scryfall non ha riconosciuto.
-func resolvePrintings(ctx context.Context, lines []MoxfieldLine) (rows []Card, missing []MoxfieldLine, err error) {
-	ids := make([]identifier, len(lines))
-	for i, l := range lines {
-		ids[i] = l.identifier()
-	}
-	found, err := scryfallCollection(ctx, ids)
-	if err != nil {
-		return nil, nil, err
-	}
-	rows, missing = matchPrintings(lines, found)
-	return rows, missing, nil
-}
-
-// matchPrintings accoppia le righe alle stampe che Scryfall ha restituito.
-// La stampa scritta nella lista fa fede: una riga con "(EOC) 57" o prende
-// quella stampa o finisce fra le mancanti. Ripiegare sul nome darebbe una
-// ristampa a caso — con l'espansione sbagliata e il prezzo di un'altra carta.
-// Il nome vale solo per le righe che la stampa non ce l'avevano proprio.
-func matchPrintings(lines []MoxfieldLine, found []scryCard) (rows []Card, missing []MoxfieldLine) {
-	bySet := map[string]scryCard{}
-	byName := map[string]scryCard{}
-	for _, c := range found {
-		bySet[c.Set+"|"+c.CollectorNumber] = c
-		if _, seen := byName[strings.ToLower(c.Name)]; !seen {
-			byName[strings.ToLower(c.Name)] = c
-		}
-	}
-	for _, l := range lines {
-		var c scryCard
-		var ok bool
-		if l.SetCode != "" {
-			c, ok = bySet[l.SetCode+"|"+l.CollectorNumber]
-		} else {
-			// Moxfield scrive "A / B" le bifacciali, Scryfall "A // B"
-			c, ok = byName[strings.ToLower(strings.ReplaceAll(l.Name, " / ", " // "))]
-		}
-		if !ok {
-			missing = append(missing, l)
-			continue
-		}
-		rows = append(rows, c.toCard(l.Qty, l.Foil))
-	}
-	return rows, missing
 }

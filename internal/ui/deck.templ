@@ -1,14 +1,16 @@
-package main
+package ui
 
 import (
 	"net/url"
 	"strings"
+
+	"commander-deckbuilder/internal/deck"
 )
 
-templ deckPage(deck Deck, cards []Card) {
-	@layout("Mazzo · " + deck.Name) {
+templ DeckPage(d deck.Deck, cards []deck.Card) {
+	@layout("Mazzo · " + d.Name) {
 		<div class="deck-page">
-			@checklist(deck, cards)
+			@Checklist(d, cards)
 			<aside class="finder" id="finder">
 				<h2>
 					@iconSearch()
@@ -20,7 +22,7 @@ templ deckPage(deck Deck, cards []Card) {
 					name="q"
 					placeholder="Sol Ring, t:creature c:g, …"
 					autocomplete="off"
-					hx-get={ "/deck/" + itoa64(deck.ID) + "/search" }
+					hx-get={ "/deck/" + itoa64(d.ID) + "/search" }
 					hx-trigger="input changed delay:300ms"
 					hx-target="#results"
 					hx-indicator="#searching"
@@ -39,10 +41,10 @@ templ deckPage(deck Deck, cards []Card) {
 	}
 }
 
-// checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, statistiche
+// Checklist è il pezzo che htmx rimpiazza a ogni modifica: intestazione, statistiche
 // e righe. L'intestazione sta dentro perché i totali cambiano a ogni spunta.
-templ checklist(deck Deck, cards []Card) {
-	{{ total := qty(cards) }}
+templ Checklist(d deck.Deck, cards []deck.Card) {
+	{{ total := deck.Qty(cards) }}
 	<div id="checklist" hx-target="this" hx-swap="outerHTML">
 		<header class="deck-bar">
 			<a class="crumb" href="/">
@@ -50,8 +52,8 @@ templ checklist(deck Deck, cards []Card) {
 				Tutti i mazzi
 			</a>
 			<div class="deck-id">
-				<h1>{ deck.Name }</h1>
-				@pips(deckColors(cards))
+				<h1>{ d.Name }</h1>
+				@pips(deck.DeckColors(cards))
 			</div>
 			if total > 0 {
 				@deckCounts(cards, false)
@@ -65,7 +67,7 @@ templ checklist(deck Deck, cards []Card) {
 					id="refresh"
 					class="btn-ghost"
 					aria-label="Riallinea i prezzi a Scryfall"
-					hx-post={ "/deck/" + itoa64(deck.ID) + "/prices" }
+					hx-post={ "/deck/" + itoa64(d.ID) + "/prices" }
 					hx-disabled-elt="this"
 				>
 					@iconRefresh()
@@ -74,7 +76,7 @@ templ checklist(deck Deck, cards []Card) {
 				<a
 					id="export"
 					class="btn-ghost"
-					href={ "/deck/" + itoa64(deck.ID) + "/export" }
+					href={ "/deck/" + itoa64(d.ID) + "/export" }
 					aria-label="Scarica il mazzo in formato Moxfield"
 				>
 					@iconDownload()
@@ -98,7 +100,7 @@ templ checklist(deck Deck, cards []Card) {
 						class="check"
 						type="checkbox"
 						aria-label="Segna come acquistate tutte le carte visibili"
-						data-url={ "/deck/" + itoa64(deck.ID) + "/purchased" }
+						data-url={ "/deck/" + itoa64(d.ID) + "/purchased" }
 						hx-sync="#deck:queue all"
 					/>
 				</label>
@@ -109,7 +111,7 @@ templ checklist(deck Deck, cards []Card) {
 				</div>
 			</div>
 			<div id="deck">
-				for _, g := range groupByCategory(cards) {
+				for _, g := range deck.GroupByCategory(cards) {
 					<section>
 						<h3>
 							{ g.Name }
@@ -128,7 +130,7 @@ templ checklist(deck Deck, cards []Card) {
 
 // deckCounts e deckStats sono le parti della checklist che dipendono dalle spunte.
 // Con oob tornano da sole, out-of-band, dopo ogni spunta: le righe restano ferme.
-templ deckCounts(cards []Card, oob bool) {
+templ deckCounts(cards []deck.Card, oob bool) {
 	<p
 		id="deck-counts"
 		class="deck-counts"
@@ -136,15 +138,15 @@ templ deckCounts(cards []Card, oob bool) {
 			hx-swap-oob="true"
 		}
 	>
-		<strong>{ itoa(purchasedQty(cards)) }/{ itoa(qty(cards)) }</strong> acquistate
+		<strong>{ itoa(deck.PurchasedQty(cards)) }/{ itoa(deck.Qty(cards)) }</strong> acquistate
 		<span class="sep">·</span>
-		<strong>{ eur(totals(cards).Total) }</strong>
+		<strong>{ eur(deck.Sum(cards).Total) }</strong>
 	</p>
 }
 
-templ deckStats(cards []Card, oob bool) {
-	{{ t := totals(cards) }}
-	{{ bought, total := purchasedQty(cards), qty(cards) }}
+templ deckStats(cards []deck.Card, oob bool) {
+	{{ t := deck.Sum(cards) }}
+	{{ bought, total := deck.PurchasedQty(cards), deck.Qty(cards) }}
 	<section
 		id="deck-stats"
 		class="deck-stats"
@@ -183,15 +185,15 @@ templ deckStats(cards []Card, oob bool) {
 	</section>
 }
 
-templ purchaseStats(cards []Card) {
+templ PurchaseStats(cards []deck.Card) {
 	@deckCounts(cards, true)
 	@deckStats(cards, true)
 }
 
 // manaCurveChart: barre in CSS puro, nessuna libreria. aria-label porta gli stessi
 // numeri a chi il grafico non lo vede.
-templ manaCurveChart(cards []Card) {
-	{{ bars := manaCurve(cards) }}
+templ manaCurveChart(cards []deck.Card) {
+	{{ bars := deck.ManaCurve(cards) }}
 	if len(bars) > 0 {
 		<figure class="curve-box">
 			<figcaption>Curva di mana <small>(terre escluse)</small></figcaption>
@@ -215,8 +217,8 @@ templ manaCurveChart(cards []Card) {
 }
 
 // colorSpread: quante carte per colore. Una multicolore conta in ogni suo colore.
-templ colorSpread(cards []Card) {
-	{{ stats := colorStats(cards) }}
+templ colorSpread(cards []deck.Card) {
+	{{ stats := deck.ColorStats(cards) }}
 	if len(stats) > 0 {
 		<figure class="colors-box">
 			<figcaption>Colori <small>(terre escluse)</small></figcaption>
@@ -233,7 +235,7 @@ templ colorSpread(cards []Card) {
 	}
 }
 
-templ cardRow(c Card) {
+templ cardRow(c deck.Card) {
 	<div class="row">
 		// label attorno alla casella: l'area cliccabile arriva a 44px senza
 		// ingrassare la casella stessa
@@ -309,7 +311,7 @@ templ mana(cost string) {
 	}
 }
 
-templ searchResults(deckID int64, cards []scryCard, err error) {
+templ SearchResults(deckID int64, cards []deck.Print, err error) {
 	if err != nil {
 		<p class="note error">{ err.Error() }</p>
 	} else if len(cards) == 0 {
@@ -320,16 +322,16 @@ templ searchResults(deckID int64, cards []scryCard, err error) {
 				<button
 					class="hit"
 					hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
-					hx-vals={ scryVals(c.ID) }
+					hx-vals={ scryVals(c.ScryfallID) }
 					hx-target="#checklist"
 					hx-swap="outerHTML"
 				>
-					<img src={ c.image() } alt="" loading="lazy"/>
+					<img src={ c.Image } alt="" loading="lazy"/>
 					<span class="hit-text">
 						<strong>{ c.Name }</strong>
 						<small>{ c.TypeLine }</small>
 					</span>
-					<span class="cost price">{ price0(c.price(false)) }</span>
+					<span class="cost price">{ price0(c.PriceEUR) }</span>
 				</button>
 				<button
 					class="prints-btn"
@@ -350,9 +352,9 @@ templ searchResults(deckID int64, cards []scryCard, err error) {
 	}
 }
 
-// printsDialog: intestazione, griglia di ristampe e paginazione. Il contenuto
+// PrintsDialog: intestazione, griglia di ristampe e paginazione. Il contenuto
 // della dialog, non la dialog stessa — quella sta già nella pagina.
-templ printsDialog(deckID int64, name string, p Page, query url.Values, err error) {
+templ PrintsDialog(deckID int64, name string, p Page, query url.Values, err error) {
 	<header class="dialog-head">
 		<div>
 			<h2 id="prints-title">Stampe di { name }</h2>
@@ -383,23 +385,23 @@ templ printsDialog(deckID int64, name string, p Page, query url.Values, err erro
 
 // printCard è una ristampa nella griglia: cliccarla mette nel mazzo quella
 // stampa lì — il server rilegge la carta dall'id, come per la ricerca.
-templ printCard(deckID int64, c scryCard) {
+templ printCard(deckID int64, c deck.Print) {
 	<button
 		class="print"
 		aria-label={ "Aggiungi " + c.Name + " — edizione " + c.SetName }
 		hx-post={ "/deck/" + itoa64(deckID) + "/cards" }
-		hx-vals={ scryVals(c.ID) }
+		hx-vals={ scryVals(c.ScryfallID) }
 		hx-target="#checklist"
 		hx-swap="outerHTML"
 	>
-		<img src={ thumbURL(c.image()) } alt="" loading="lazy"/>
+		<img src={ thumbURL(c.Image) } alt="" loading="lazy"/>
 		<span class="print-set">
 			{ strings.ToUpper(c.Set) } { c.CollectorNumber }
 		</span>
 		<span class="print-name">{ c.SetName }</span>
 		<span class="print-foot">
 			<span>{ printYear(c.ReleasedAt) }</span>
-			<b class="price">{ price0(c.price(false)) }</b>
+			<b class="price">{ price0(c.PriceEUR) }</b>
 		</span>
 	</button>
 }

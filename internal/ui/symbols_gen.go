@@ -1,5 +1,5 @@
 // Generato da tools/symbols — non modificare a mano.
-package main
+package ui
 
 // symbols mappa il simbolo Scryfall ({W}, {2/U}, …) al file SVG in static/symbols/.
 var symbols = map[string]string{
