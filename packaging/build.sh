@@ -67,6 +67,11 @@ for arch in arm64 amd64; do
 </dict>
 </plist>
 PLIST
+  # Firma ad-hoc del bundle, solo su un Mac (codesign non esiste altrove) e prima
+  # dello zip, così è firmato anche quello. Non è una firma da sviluppatore
+  # (Gatekeeper chiede comunque clic destro → Apri), ma senza, su Apple Silicon
+  # un .app scaricato può risultare "danneggiato" invece che solo "non verificato".
+  if [ "$(uname)" = "Darwin" ]; then codesign --force --deep --sign - "$app"; fi
   # zip conservando il bit di esecuzione: senza, il .app non parte.
   python3 - "$OUT/macos/$arch" "$APPNAME.app" \
     "$OUT/CommanderDeckbuilder-$VERSION-macos-$arch.zip" <<'PY'
@@ -88,10 +93,6 @@ done
 # resta lo zip. Vedi il README per firma e notarizzazione.
 if [ "$(uname)" = "Darwin" ]; then
   for arch in arm64 amd64; do
-    # Firma ad-hoc del bundle: non è una firma da sviluppatore (Gatekeeper chiede
-    # comunque clic destro → Apri), ma senza, su Apple Silicon un .app scaricato
-    # può risultare "danneggiato" invece che solo "non verificato".
-    codesign --force --deep --sign - "$OUT/macos/$arch/$APPNAME.app"
     # Il collegamento ad Applicazioni: aperto il .dmg, si trascina l'app lì sopra.
     ln -sfn /Applications "$OUT/macos/$arch/Applications"
     hdiutil create -volname "$APPNAME" -srcfolder "$OUT/macos/$arch" -ov -format UDZO \
